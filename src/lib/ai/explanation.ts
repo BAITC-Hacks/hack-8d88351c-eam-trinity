@@ -6,6 +6,10 @@ import { rules, ruleIds, type ToolContext } from "./tools";
 export const answerSchema = z
   .object({
     intent: z.enum(["audit", "explain", "rules", "outside_model"]),
+    response: z.object({
+      kind: z.enum(["audit", "indicator", "district", "comparison", "cause", "map", "risks", "next_checks"]),
+      paragraphs: z.array(z.string().min(1).max(1400)).min(1).max(5),
+    }).strict().optional(),
     claims: z
       .array(
         z
@@ -32,6 +36,8 @@ export type Fact = {
 };
 export type Answer = {
   summary: string;
+  narrative?: string[];
+  responseKind?: string;
   facts: Fact[];
   limitations: string[];
   details?: { budget?: Fact; risks: Fact[]; nextChecks: string[] };
@@ -114,6 +120,18 @@ export function verifyAnswer(input: unknown, ctx: ToolContext): Answer {
         : parsed.intent === "explain"
           ? "Показанные изменения подтверждены журналом расчёта. Нажмите на факт, чтобы увидеть исходное значение и каждый применённый эффект."
           : `Официальный расчёт${ctx.winter ? " и отдельный учебный эксперимент" : ""} выполнен инструментами. Ниже — проверенные результаты выбранного плана.`;
+  const narrative = parsed.response?.paragraphs.map((paragraph) => {
+    const plain = paragraph.replace(/\{fact:\d+\}/g, "");
+    // Numeric literals must be inserted from a verified claim, never model prose.
+    if (/[\p{N}%=<>]/u.test(plain) || /(?:^|[^\p{L}])(?:ноль|нул[ьяюе]|один|одна|одно|дв[ае]|три|четыре|пять|шесть|семь|восемь|девять|десять|сорок|сто|процентов)(?:$|[^\p{L}])/iu.test(plain))
+      throw new Error("UNVERIFIED_NARRATIVE_NUMBER");
+    return paragraph.replace(/\{fact:(\d+)\}/g, (_, index: string) => {
+      const fact = facts[Number(index)];
+      if (!fact) throw new Error("UNKNOWN_NARRATIVE_FACT");
+      return `${fact.label}: ${fact.value}`;
+    });
+  });
+  const fullReport = parsed.response ? parsed.response.kind === "audit" : true;
   // Presentation only: numbers come from completed engine results, never model prose.
   const official = [...ctx.results.values()].find((r) => r.kind === "official");
   const primary = facts.find((f) => f.evidenceId) ?? facts[0];
@@ -151,10 +169,11 @@ export function verifyAnswer(input: unknown, ctx: ToolContext): Answer {
     }
   }
   return {
-    summary,
+    summary: narrative?.[0] ?? summary,
+    ...(narrative ? { narrative, responseKind: parsed.response!.kind } : {}),
     facts,
     details: {
-      ...(numerical && official && ctx.executed.has("evaluate_scenario")
+      ...(fullReport && numerical && official && ctx.executed.has("evaluate_scenario")
         ? {
             budget: {
               label: "Стоимость и бюджет",
@@ -163,8 +182,8 @@ export function verifyAnswer(input: unknown, ctx: ToolContext): Answer {
             },
           }
         : {}),
-      risks,
-      nextChecks: numerical
+      risks: fullReport ? risks : [],
+      nextChecks: parsed.response ? [] : numerical
         ? [
             ...(facts.some((f) => f.evidenceId)
               ? ["Сверьте слагаемые выбранного показателя в расчёте."]
@@ -181,7 +200,7 @@ export function verifyAnswer(input: unknown, ctx: ToolContext): Answer {
             "Выберите район с данными и попросите проверить его показатель.",
           ],
     },
-    limitations: [
+    limitations: parsed.response ? [] : [
       "Синтетическая учебная модель: результат не является рекомендацией реальной городской политики.",
       ...(ctx.winter
         ? [

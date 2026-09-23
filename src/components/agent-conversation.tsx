@@ -116,7 +116,8 @@ export function AgentConversation({
                 ))}
               {answer && (
                 <div className="chat-answer">
-                  <h4>Ключевой результат</h4>
+                  {answer.narrative?.map((text, i) => <p key={`narrative-${i}`}>{text}</p>)}
+                  <h4>{answer.narrative ? "Подтверждённые вычисления" : "Ключевой результат"}</h4>
                   {primary ? (
                     renderFact(primary, "primary")
                   ) : (
@@ -132,11 +133,11 @@ export function AgentConversation({
                   )}
                   {otherFacts.length > 0 && (
                     <>
-                      <h4>Основные изменения</h4>
+                      {!answer.narrative && <h4>Основные изменения</h4>}
                       {otherFacts.map((f, i) => renderFact(f, `fact-${i}`))}
                     </>
                   )}
-                  <h4>Риски и компромиссы</h4>
+                  {!!answer.details?.risks.length && <h4>Риски и компромиссы</h4>}
                   {answer.details?.risks.map((f, i) =>
                     renderFact(f, `risk-${i}`),
                   )}
@@ -145,11 +146,11 @@ export function AgentConversation({
                       {text}
                     </p>
                   ))}
-                  {answer.details && (
+                  {!!answer.details?.nextChecks.length && (
                     <>
                       <h4>Что проверить дальше</h4>
                       <ul className="next-checks">
-                        {answer.details.nextChecks.map((text, i) => (
+                        {answer.details!.nextChecks.map((text, i) => (
                           <li key={i}>{text}</li>
                         ))}
                       </ul>

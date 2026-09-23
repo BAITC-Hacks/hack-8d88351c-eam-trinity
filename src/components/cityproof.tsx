@@ -1033,7 +1033,7 @@ export function Cityproof() {
                 </>
               )}
             </button>
-            <small>Числа считает модель города. ИИ объясняет.</small>
+            <small>Учебная синтетическая модель</small>
           </div>
         </aside>
       </main>

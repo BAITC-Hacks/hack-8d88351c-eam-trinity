@@ -45,6 +45,8 @@ const storedTurns = z.array(
     answer: z
       .object({
         summary: z.string(),
+        narrative: z.array(z.string()).optional(),
+        responseKind: z.string().optional(),
         facts: z.array(fact),
         limitations: z.array(z.string()),
         details: z

@@ -106,7 +106,10 @@ export async function runAgent({
       {
         model,
         instructions:
-          instructions +
+          instructions + `\nОсталось инструментальных вызовов: ${8 - calls}. Для общего audit достаточно агрегатов и не более двух get_evidence по главным слабым местам. Не собирай все показатели. Получай независимые evidence одним параллельным пакетом вызовов. Перед исчерпанием лимита верни подтверждённый ответ. ` +
+          `\nРазличай намерения в response.kind: audit только общий анализ плана; indicator — конкретный показатель; district — район; comparison — сравнение с зимой; cause — причина; map — показать; risks — риски; next_checks — следующие проверки. Пиши response.paragraphs естественным русским языком: первый абзац прямо отвечает последнему вопросу. Не повторяй общий отчёт, бюджет, дисклеймеры и рекомендации при точечном вопросе. Для audit предложи варианты следующей проверки по фактическим слабым местам. Для follow-up местоимения разрешай по priorHistory, а не по selectedFocus.
+Числа, коды показателей и мер НЕ пиши в prose самостоятельно, даже словами: вставляй {fact:0}, {fact:1} и т.д. Это индексы claims, сервер подставит полное проверенное утверждение. Остальной текст объясняет причинную связь только по полученным инструментами данным. Не добавляй новые численные утверждения. Каждый абзац о результате должен ссылаться на соответствующий факт.
+Для показателя получи get_evidence официального результата и, если зима включена, экспериментального: это VERIFIED FACTS с initial/value/contributions/full/factor/delta. Объясни реально присутствующие меры, лаг и синергию; отсутствие зимнего эффекта подтверждай одинаковыми значениями официального и экспериментального evidence, не придумывай contribution. Для comparison сосредоточься на изменённых зимой показателях. Для map первый indicator claim обязан ссылаться на evidence, отправленное show_evidence_on_map. Пример из вопроса не является источником чисел: только текущие tools. ` +
           `\nЕсли mapDisplayRequested=true, после расчётов и get_evidence обязательно вызови show_evidence_on_map для результата, который пользователь просит показать. Выбирай район, метрику и режим по смыслу текущего вопроса, не по предыдущему фокусу. Справочник metrics связывает русское название с ID, например название запроса важнее selectedFocus. requestedMapTarget, если задан, обязателен; district=null означает отсутствие учебных данных. requestedMapMode (official/experimental), когда задан, обязателен: используй evidence именно этого результата. winter=true требует расчёт эксперимента, но не означает, что нужно показывать зимний режим вместо запрошенного «после решений». Показывай только целевой результат, не каждый промежуточный. При false не вызывай этот инструмент: кнопка показа останется в ответе. Возврат queued означает отправку команды, не выполненный переход. Для Сарайшық получи get_model_rules и объясни правилом geography отсутствие учебных данных без численных claims и показа другого района.`,
         input,
         tools,
@@ -116,7 +119,7 @@ export async function runAgent({
           format: {
             type: "json_schema",
             name: "verified_city_explanation",
-            schema: z.toJSONSchema(answerSchema),
+            schema: z.toJSONSchema(answerSchema.required({ response: true })),
             strict: true,
           },
         },
@@ -204,6 +207,8 @@ export async function runAgent({
         !action.seen.size
       )
         throw new Error("MAP_ACTION_REQUIRED");
+      if (action.seen.size && !action.seen.has(answer.facts.find((f) => f.evidenceId)?.evidenceId ?? ""))
+        throw new Error("MAP_ANSWER_MISMATCH");
       signal.throwIfAborted();
       emit({ type: "answer", answer });
       return answer;

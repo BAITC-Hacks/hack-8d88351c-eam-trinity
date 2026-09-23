@@ -1,0 +1,564 @@
+{
+  "schema_version": "1.0",
+  "provenance": {
+    "source_file": "документ.docx",
+    "source_sections": [
+      "1. Датасет районов",
+      "2. Каталог мероприятий (14 шт.)",
+      "3. Формула Score",
+      "4. Правила"
+    ],
+    "note": "Синтетические учебные данные организаторов. Это не статистика о реальной Астане. Названия полей JSON, транслитерированные district id и численные результаты verification — подготовленная для реализации производная, не исходный файл организатора."
+  },
+  "constants": {
+    "budget": 100,
+    "required_decisions": 5,
+    "max_per_direction": 2,
+    "horizon_quarters": 8,
+    "indicator_min": 0,
+    "indicator_max": 100,
+    "critical_threshold_strictly_below": 40,
+    "critical_penalty_per_pair": 1,
+    "city_mean_weight": 0.7,
+    "minimum_district_weight": 0.3
+  },
+  "rules": {
+    "unique_measures": true,
+    "district_required_for_district_scope": true,
+    "district_omitted_for_city_scope": true,
+    "order_independent": true,
+    "unused_budget_bonus": 0,
+    "invalid_scenario_score": null,
+    "city_cost_charged_once": true,
+    "synergy_scaled_by_lag": false
+  },
+  "metrics": [
+    {
+      "id": "T1",
+      "direction": "Транспорт",
+      "name": "Разгрузка дорог",
+      "source_definition": "100 = нет пробок в час пик, 0 = стоит всё",
+      "weight": 0.1
+    },
+    {
+      "id": "T2",
+      "direction": "Транспорт",
+      "name": "Доступность общественного транспорта",
+      "source_definition": "100 = все жители в 500 м от остановки с интервалом ≤10 мин",
+      "weight": 0.1
+    },
+    {
+      "id": "E1",
+      "direction": "Экология",
+      "name": "Озеленение",
+      "source_definition": "100 = ≥20 м² зелени на жителя",
+      "weight": 0.09
+    },
+    {
+      "id": "E2",
+      "direction": "Экология",
+      "name": "Качество воздуха",
+      "source_definition": "100 = зимой AQI ≤50, 0 = хронический смог",
+      "weight": 0.11
+    },
+    {
+      "id": "S1",
+      "direction": "Соцсфера",
+      "name": "Школы и детсады",
+      "source_definition": "100 = 100% нормативной потребности, без 2-й смены",
+      "weight": 0.11
+    },
+    {
+      "id": "S2",
+      "direction": "Соцсфера",
+      "name": "Поликлиники и первичная медпомощь",
+      "source_definition": "100 = норматив на жителя выполнен полностью",
+      "weight": 0.11
+    },
+    {
+      "id": "B1",
+      "direction": "Безопасность",
+      "name": "Безопасность улиц",
+      "source_definition": "100 = освещение и камеры везде, минимум происшествий",
+      "weight": 0.09
+    },
+    {
+      "id": "B2",
+      "direction": "Безопасность",
+      "name": "Безопасность дорожного движения",
+      "source_definition": "100 = минимум ДТП с пострадавшими",
+      "weight": 0.09
+    },
+    {
+      "id": "C1",
+      "direction": "Сервисы",
+      "name": "Надёжность ЖКХ",
+      "source_definition": "100 = нет аварий отопления/воды за год",
+      "weight": 0.1
+    },
+    {
+      "id": "C2",
+      "direction": "Сервисы",
+      "name": "Скорость решения обращений жителей",
+      "source_definition": "100 = все обращения закрыты в срок",
+      "weight": 0.1
+    }
+  ],
+  "districts": [
+    {
+      "id": "esil",
+      "name": "Есиль",
+      "population_share": 0.27,
+      "indicators": {
+        "T1": 45,
+        "T2": 62,
+        "E1": 68,
+        "E2": 72,
+        "S1": 48,
+        "S2": 55,
+        "B1": 78,
+        "B2": 60,
+        "C1": 75,
+        "C2": 70
+      },
+      "source_district_total": 62.99
+    },
+    {
+      "id": "almaty",
+      "name": "Алматы",
+      "population_share": 0.24,
+      "indicators": {
+        "T1": 40,
+        "T2": 75,
+        "E1": 50,
+        "E2": 55,
+        "S1": 60,
+        "S2": 65,
+        "B1": 62,
+        "B2": 52,
+        "C1": 50,
+        "C2": 60
+      },
+      "source_district_total": 57.06
+    },
+    {
+      "id": "saryarka",
+      "name": "Сарыарка",
+      "population_share": 0.2,
+      "indicators": {
+        "T1": 50,
+        "T2": 70,
+        "E1": 42,
+        "E2": 40,
+        "S1": 62,
+        "S2": 68,
+        "B1": 58,
+        "B2": 55,
+        "C1": 45,
+        "C2": 55
+      },
+      "source_district_total": 54.65
+    },
+    {
+      "id": "baikonur",
+      "name": "Байконур",
+      "population_share": 0.13,
+      "indicators": {
+        "T1": 52,
+        "T2": 68,
+        "E1": 55,
+        "E2": 50,
+        "S1": 58,
+        "S2": 60,
+        "B1": 52,
+        "B2": 58,
+        "C1": 55,
+        "C2": 58
+      },
+      "source_district_total": 56.63
+    },
+    {
+      "id": "nura",
+      "name": "Нура",
+      "population_share": 0.16,
+      "indicators": {
+        "T1": 55,
+        "T2": 40,
+        "E1": 45,
+        "E2": 65,
+        "S1": 38,
+        "S2": 35,
+        "B1": 55,
+        "B2": 50,
+        "C1": 60,
+        "C2": 50
+      },
+      "source_district_total": 49.18
+    }
+  ],
+  "measures": [
+    {
+      "id": "M1",
+      "direction": "Транспорт",
+      "name": "Выделенные полосы для автобусов",
+      "scope": "district",
+      "cost": 18,
+      "lag_quarters": 2,
+      "effects": {
+        "T1": 6,
+        "T2": 9
+      }
+    },
+    {
+      "id": "M2",
+      "direction": "Транспорт",
+      "name": "Умные светофоры (адаптивное управление)",
+      "scope": "city",
+      "cost": 22,
+      "lag_quarters": 2,
+      "effects": {
+        "T1": 4,
+        "B2": 3
+      }
+    },
+    {
+      "id": "M3",
+      "direction": "Транспорт",
+      "name": "Линия ЛРТ / расширение",
+      "scope": "district",
+      "cost": 30,
+      "lag_quarters": 4,
+      "effects": {
+        "T1": 16,
+        "T2": 20,
+        "E2": 4
+      }
+    },
+    {
+      "id": "M4",
+      "direction": "Экология",
+      "name": "Парк / сквер",
+      "scope": "district",
+      "cost": 15,
+      "lag_quarters": 2,
+      "effects": {
+        "E1": 12,
+        "E2": 3,
+        "B1": 2
+      }
+    },
+    {
+      "id": "M5",
+      "direction": "Экология",
+      "name": "Перевод частного сектора на чистое топливо",
+      "scope": "district",
+      "cost": 25,
+      "lag_quarters": 3,
+      "effects": {
+        "E2": 14,
+        "C1": 4
+      }
+    },
+    {
+      "id": "M6",
+      "direction": "Экология",
+      "name": "Городская программа озеленения и ветрозащитных полос",
+      "scope": "city",
+      "cost": 20,
+      "lag_quarters": 4,
+      "effects": {
+        "E1": 5,
+        "E2": 3
+      }
+    },
+    {
+      "id": "M7",
+      "direction": "Соцсфера",
+      "name": "Школа + детсад (модульное строительство)",
+      "scope": "district",
+      "cost": 24,
+      "lag_quarters": 3,
+      "effects": {
+        "S1": 16
+      }
+    },
+    {
+      "id": "M8",
+      "direction": "Соцсфера",
+      "name": "Центр семейного здоровья / поликлиника",
+      "scope": "district",
+      "cost": 20,
+      "lag_quarters": 3,
+      "effects": {
+        "S2": 14
+      }
+    },
+    {
+      "id": "M9",
+      "direction": "Соцсфера",
+      "name": "Дворовые спорт-хабы",
+      "scope": "district",
+      "cost": 10,
+      "lag_quarters": 1,
+      "effects": {
+        "S1": 3,
+        "S2": 3,
+        "B1": 3
+      }
+    },
+    {
+      "id": "M10",
+      "direction": "Безопасность",
+      "name": "Освещение и камеры (расширение Safe City)",
+      "scope": "district",
+      "cost": 12,
+      "lag_quarters": 1,
+      "effects": {
+        "B1": 12,
+        "B2": 2
+      }
+    },
+    {
+      "id": "M11",
+      "direction": "Безопасность",
+      "name": "Безопасные переходы и школьные зоны",
+      "scope": "district",
+      "cost": 10,
+      "lag_quarters": 1,
+      "effects": {
+        "B2": 12,
+        "T1": -2
+      }
+    },
+    {
+      "id": "M12",
+      "direction": "Сервисы",
+      "name": "Единая цифровая платформа обращений",
+      "scope": "city",
+      "cost": 14,
+      "lag_quarters": 1,
+      "effects": {
+        "C2": 5
+      }
+    },
+    {
+      "id": "M13",
+      "direction": "Сервисы",
+      "name": "Модернизация тепло- и водосетей",
+      "scope": "district",
+      "cost": 28,
+      "lag_quarters": 4,
+      "effects": {
+        "C1": 18,
+        "E2": 2
+      }
+    },
+    {
+      "id": "M14",
+      "direction": "Сервисы",
+      "name": "Аварийные бригады ЖКХ + раннее оповещение",
+      "scope": "city",
+      "cost": 16,
+      "lag_quarters": 1,
+      "effects": {
+        "C1": 5,
+        "C2": 2
+      }
+    }
+  ],
+  "synergies": [
+    {
+      "measure_ids": [
+        "M1",
+        "M2"
+      ],
+      "target_district_of": "M1",
+      "effects": {
+        "T1": 2
+      }
+    },
+    {
+      "measure_ids": [
+        "M10",
+        "M12"
+      ],
+      "target_district_of": "M10",
+      "effects": {
+        "B1": 2
+      }
+    },
+    {
+      "measure_ids": [
+        "M5",
+        "M6"
+      ],
+      "target_district_of": "M5",
+      "effects": {
+        "E2": 2
+      }
+    }
+  ],
+  "conflicts": [
+    {
+      "measure_ids": [
+        "M1",
+        "M3"
+      ],
+      "condition": "always"
+    },
+    {
+      "measure_ids": [
+        "M4",
+        "M7"
+      ],
+      "condition": "same_district"
+    },
+    {
+      "measure_ids": [
+        "M5",
+        "M13"
+      ],
+      "condition": "same_district"
+    }
+  ],
+  "formula": {
+    "indicator": "clip(initial + sum(effect * (8 - lag_quarters) / 8) + fixed_synergies, 0, 100)",
+    "district_total": "sum(weight[k] * updated_indicator[d][k])",
+    "city_mean": "sum(population_share[d] * district_total[d])",
+    "critical_count": "count((d,k) where updated_indicator[d][k] < 40)",
+    "score": "0.7 * city_mean + 0.3 * min(district_total.values()) - critical_count",
+    "implementation_note": "Сложить все эффекты и синергии, затем clip ОДИН раз. Не округлять промежуточные результаты. Округление до двух знаков только для отображения."
+  },
+  "source_example": {
+    "description": "Пример допустимого набора из раздела 3, не рекомендация и не оптимизированный набор. Указание «город» преобразовано в отсутствие district_id согласно правилу 4.",
+    "decisions": [
+      {
+        "measure_id": "M7",
+        "district_id": "nura"
+      },
+      {
+        "measure_id": "M8",
+        "district_id": "nura"
+      },
+      {
+        "measure_id": "M10",
+        "district_id": "nura"
+      },
+      {
+        "measure_id": "M12"
+      },
+      {
+        "measure_id": "M5",
+        "district_id": "saryarka"
+      }
+    ],
+    "source_cost": 95
+  },
+  "open_question": {
+    "issue": "Краткое ТЗ перечисляет 5 направлений; подробные правила допускают максимум 2 меры на направление и минимум 3 затронутых направления. Пример не содержит транспорта.",
+    "working_implementation": "Реализовать правило раздела 4 документа.docx; подтвердить трактовку у ментора. Не выдавать это за полученное разъяснение организатора."
+  },
+  "verification": {
+    "note": "Контрольные результаты вычислены отдельно при подготовке JSON по исходной формуле. Это тестовые значения для реализации, не внешние наблюдения и не оценка реальных городских решений. Базовое состояние показывается отдельно и не делает набор из 0 решений допустимым.",
+    "arithmetic": "Python decimal, no intermediate rounding",
+    "suggested_absolute_tolerance": 1e-08,
+    "baseline": {
+      "district_totals": {
+        "esil": 62.99,
+        "almaty": 57.06,
+        "saryarka": 54.65,
+        "baikonur": 56.63,
+        "nura": 49.18
+      },
+      "city_mean": 56.8624,
+      "critical_pairs": [
+        {
+          "district_id": "nura",
+          "metric_id": "S1"
+        },
+        {
+          "district_id": "nura",
+          "metric_id": "S2"
+        }
+      ],
+      "critical_count": 2,
+      "score": 52.55768
+    },
+    "source_example": {
+      "district_totals": {
+        "esil": 63.4275,
+        "almaty": 57.4975,
+        "saryarka": 56.3,
+        "baikonur": 57.0675,
+        "nura": 52.9625
+      },
+      "city_mean": 58.0776,
+      "critical_pairs": [],
+      "critical_count": 0,
+      "score": 56.54307,
+      "cost": 95,
+      "updated_indicators": {
+        "esil": {
+          "T1": 45.0,
+          "T2": 62.0,
+          "E1": 68.0,
+          "E2": 72.0,
+          "S1": 48.0,
+          "S2": 55.0,
+          "B1": 78.0,
+          "B2": 60.0,
+          "C1": 75.0,
+          "C2": 74.375
+        },
+        "almaty": {
+          "T1": 40.0,
+          "T2": 75.0,
+          "E1": 50.0,
+          "E2": 55.0,
+          "S1": 60.0,
+          "S2": 65.0,
+          "B1": 62.0,
+          "B2": 52.0,
+          "C1": 50.0,
+          "C2": 64.375
+        },
+        "saryarka": {
+          "T1": 50.0,
+          "T2": 70.0,
+          "E1": 42.0,
+          "E2": 48.75,
+          "S1": 62.0,
+          "S2": 68.0,
+          "B1": 58.0,
+          "B2": 55.0,
+          "C1": 47.5,
+          "C2": 59.375
+        },
+        "baikonur": {
+          "T1": 52.0,
+          "T2": 68.0,
+          "E1": 55.0,
+          "E2": 50.0,
+          "S1": 58.0,
+          "S2": 60.0,
+          "B1": 52.0,
+          "B2": 58.0,
+          "C1": 55.0,
+          "C2": 62.375
+        },
+        "nura": {
+          "T1": 55.0,
+          "T2": 40.0,
+          "E1": 45.0,
+          "E2": 65.0,
+          "S1": 48.0,
+          "S2": 43.75,
+          "B1": 67.5,
+          "B2": 51.75,
+          "C1": 60.0,
+          "C2": 54.375
+        }
+      }
+    }
+  }
+}

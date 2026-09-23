@@ -1,0 +1,19 @@
+{
+  "status": "passed",
+  "scope": "Prepared data and reference arithmetic only; not application tests, not API connectivity, not optimizer verification.",
+  "checks": [
+    "All 50 initial indicator values, all population shares and source district totals match DOCX table 2.",
+    "All 14 measure IDs, names, directions, scopes, costs, lags and signed effects match DOCX table 3.",
+    "All indicator weights match DOCX table 5; weight and population-share sums equal 1.",
+    "All three synergy pairs, fixed deltas and target districts match DOCX table 4.",
+    "Baseline and organizer example control arithmetic re-evaluated using Decimal with no intermediate rounding; matches prepared verification data."
+  ],
+  "original_source_filenames": {
+    "HackAlem AI_ «Аким на 5 часов» - AI-симулятор управления городом.pdf": "01_case.pdf",
+    "документ.docx": "02_dataset.docx",
+    "Инструкция_для_участников_HackAlem_AI.pdf": "03_participant_instructions.pdf",
+    "Правила зачета участия.pdf": "04_participation_rules.pdf"
+  },
+  "sha256_model_json": "2e934f191834e3e4184ef70e036b75780c5e7cdd0450db0d5793c6fbaa742f0b",
+  "stress_event_coefficients_verified_as_real_world_data": false
+}

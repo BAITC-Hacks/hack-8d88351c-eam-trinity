@@ -64,4 +64,10 @@ export function districtStyle(
   };
 }
 
-export type MapFocusRequest = { id: string; featureId: string };
+export type MapFocusRequest = {
+  id: string;
+  featureId: string;
+  resultId: string;
+  metricId: MetricId;
+  evidenceId: string;
+};

@@ -426,3 +426,85 @@
     line-height: 1.5;
   }
 }
+.map-evidence {
+  position: relative;
+  flex-shrink: 0;
+  margin-top: 10px;
+  padding: 13px 15px;
+  border: 1px solid #c8dcf5;
+  border-radius: 12px;
+  background: #fff;
+  max-height: 186px;
+  overflow: auto;
+}
+.evidence-close {
+  position: absolute;
+  top: 5px;
+  right: 5px;
+  width: 26px;
+  height: 26px;
+}
+.map-evidence .eyebrow {
+  font-size: 9px;
+}
+.evidence-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 15px;
+  padding: 7px 26px 4px 0;
+}
+.evidence-heading strong {
+  font-size: 12px;
+  font-weight: 600;
+}
+.evidence-heading b {
+  font-size: 18px;
+  white-space: nowrap;
+  color: #235ba9;
+}
+.map-evidence > p {
+  font-size: 11px;
+  color: #526983;
+  margin: 1px 0 7px;
+}
+.map-evidence summary {
+  font-size: 11px;
+  font-weight: 600;
+  color: #21589f;
+  cursor: pointer;
+  padding: 4px 0;
+}
+.map-evidence .ledger-row {
+  font-size: 11px;
+  padding: 8px 0;
+}
+.map-evidence details > small {
+  font-size: 10px;
+  color: #5d6c80;
+}
+.map-action-status {
+  font-size: 11px;
+  line-height: 1.5;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: #f1f6fd;
+  margin: 5px 0;
+  color: #4b6688;
+}
+.map-action-status.applied {
+  border: 1px solid #bfd5f1;
+  color: #164b92;
+}
+.tool-log code {
+  overflow-wrap: anywhere;
+}
+@media (max-width: 680px) {
+  .evidence-heading {
+    display: block;
+  }
+  .evidence-heading b {
+    display: block;
+    margin-top: 5px;
+  }
+}

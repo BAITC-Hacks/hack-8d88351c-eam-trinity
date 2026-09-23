@@ -7,7 +7,18 @@ import type {
 import { z } from "zod";
 import { answerSchema, verifyAnswer, type Answer } from "./explanation";
 import { executeTool, tools, type ToolContext } from "./tools";
-import type { Result, DistrictId, MetricId } from "../model/engine";
+import {
+  model as cityModel,
+  type Result,
+  type DistrictId,
+  type MetricId,
+} from "../model/engine";
+import {
+  requestsMapDisplay,
+  requestedMapMode,
+  requestedMapTarget,
+  type MapCommand,
+} from "../map/commands";
 export type AgentEvent =
   | {
       type: "tool";
@@ -17,6 +28,7 @@ export type AgentEvent =
       args?: unknown;
     }
   | { type: "result"; result: Result }
+  | { type: "map_command"; command: MapCommand }
   | { type: "answer"; answer: Answer }
   | { type: "error"; text: string }
   | { type: "run"; runId: string };
@@ -56,11 +68,25 @@ export async function runAgent({
   transport: ModelTransport;
   history: { question: string; answer: Answer }[];
 }): Promise<Answer> {
+  const action = {
+    ...requestedMapTarget(question),
+    allowed: requestsMapDisplay(question),
+    mode: requestedMapMode(question),
+    seen: new Set<string>(),
+  };
   const input: ResponseInputItem[] = [
     {
       role: "user",
       content: JSON.stringify({
         question,
+        mapDisplayRequested: action.allowed,
+        requestedMapMode: action.mode,
+        requestedMapTarget: {
+          district: action.district,
+          metric: action.metric,
+        },
+        metrics: cityModel.metrics,
+        districts: cityModel.districts.map(({ id, name }) => ({ id, name })),
         selectedFocus: focus,
         snapshot: ctx.decisions,
         winter: ctx.winter,
@@ -79,7 +105,9 @@ export async function runAgent({
     const response = await transport(
       {
         model,
-        instructions,
+        instructions:
+          instructions +
+          `\nЕсли mapDisplayRequested=true, после расчётов и get_evidence обязательно вызови show_evidence_on_map для результата, который пользователь просит показать. Выбирай район, метрику и режим по смыслу текущего вопроса, не по предыдущему фокусу. Справочник metrics связывает русское название с ID, например название запроса важнее selectedFocus. requestedMapTarget, если задан, обязателен; district=null означает отсутствие учебных данных. requestedMapMode (official/experimental), когда задан, обязателен: используй evidence именно этого результата. winter=true требует расчёт эксперимента, но не означает, что нужно показывать зимний режим вместо запрошенного «после решений». Показывай только целевой результат, не каждый промежуточный. При false не вызывай этот инструмент: кнопка показа останется в ответе. Возврат queued означает отправку команды, не выполненный переход. Для Сарайшық получи get_model_rules и объясни правилом geography отсутствие учебных данных без численных claims и показа другого района.`,
         input,
         tools,
         store: false,
@@ -95,6 +123,7 @@ export async function runAgent({
       },
       signal,
     );
+    signal.throwIfAborted();
     for (const item of response.output) {
       if (
         item.type === "message" ||
@@ -116,7 +145,8 @@ export async function runAgent({
         try {
           args = JSON.parse(call.arguments);
           emit({ type: "tool", name: call.name, status: "started", args });
-          const output = executeTool(call.name, args, ctx);
+          const output = executeTool(call.name, args, ctx, action);
+          signal.throwIfAborted();
           emit({
             type: "tool",
             name: call.name,
@@ -129,6 +159,15 @@ export async function runAgent({
             output: JSON.stringify(output),
           });
           if (
+            call.name === "show_evidence_on_map" &&
+            (output as { status: string }).status === "queued"
+          ) {
+            emit({
+              type: "map_command",
+              command: (output as { command: MapCommand }).command,
+            });
+          }
+          if (
             call.name === "evaluate_scenario" ||
             call.name === "run_stress_test"
           ) {
@@ -137,6 +176,7 @@ export async function runAgent({
               emit({ type: "result", result: ctx.results.get(id)! });
           }
         } catch (error) {
+          signal.throwIfAborted();
           const code =
             error instanceof Error && /^[A-Z_]+$/.test(error.message)
               ? error.message
@@ -158,6 +198,13 @@ export async function runAgent({
     }
     try {
       const answer = verifyAnswer(JSON.parse(response.output_text), ctx);
+      if (
+        action.allowed &&
+        answer.facts.some((f) => f.evidenceId) &&
+        !action.seen.size
+      )
+        throw new Error("MAP_ACTION_REQUIRED");
+      signal.throwIfAborted();
       emit({ type: "answer", answer });
       return answer;
     } catch (error) {

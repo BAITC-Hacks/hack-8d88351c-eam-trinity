@@ -1,4 +1,6 @@
 import { z } from "zod";
+import { randomUUID } from "node:crypto";
+import { commandForEvidence } from "../map/commands";
 import type { FunctionTool } from "openai/resources/responses/responses";
 import {
   model,
@@ -11,6 +13,8 @@ import {
   type Decision,
   type Result,
   type Evidence,
+  type DistrictId,
+  type MetricId,
 } from "../model/engine";
 
 export const rules = {
@@ -29,6 +33,8 @@ export const rules = {
     "Учебная зима — допущение команды: T1 −4 и C1 −8 во всех районах после официального расчёта, однократно. Это не прогноз.",
   interpretation:
     "Данные синтетические. Результат относится только к выбранным условиям; он не подтверждает реальную безопасность и не определяет лучшую городскую политику.",
+  geography:
+    "Карта показывает шесть районов OSM, учебные данные есть только для пяти. Сарайшық не входит в учебный набор: его показатели неизвестны, мероприятия и расчёты для него недоступны. Границы OSM не являются официально заверенными; связь с учебными показателями выполнена по названию.",
 } as const;
 export const ruleIds = Object.keys(rules) as [
   keyof typeof rules,
@@ -46,6 +52,7 @@ const toolDecisions = z
   )
   .length(5);
 export const toolSchemas = {
+  show_evidence_on_map: z.object({ evidence_id: z.string() }).strict(),
   get_model_rules: z.object({}).strict(),
   evaluate_scenario: z.object({ decisions: toolDecisions }).strict(),
   run_stress_test: z
@@ -63,6 +70,8 @@ export const toolSchemas = {
     .strict(),
 };
 const descriptions = {
+  show_evidence_on_map:
+    "По явной просьбе пользователя показать результат: отправить браузеру команду выбора района, показателя, режима и вычисления из ранее полученного evidence текущего запуска. Возвращает queued, а не подтверждение выполненного перехода. Для обычного объяснения не вызывай.",
   get_model_rules:
     "Получить правила учебной модели, определения и допустимые события.",
   evaluate_scenario:
@@ -132,7 +141,56 @@ export function executeTool(
   name: string,
   args: unknown,
   ctx: ToolContext,
+  action?: {
+    allowed: boolean;
+    seen: Set<string>;
+    mode?: "official" | "experimental";
+    metric?: MetricId;
+    district?: DistrictId | null;
+  },
 ): unknown {
+  if (name === "show_evidence_on_map") {
+    const { evidence_id } = toolSchemas.show_evidence_on_map.parse(args);
+    if (!action?.allowed) throw new Error("MAP_ACTION_NOT_REQUESTED");
+    const evidence = ctx.evidence.get(evidence_id);
+    const result = [...ctx.results.values()].find(
+      (r) => r.evidence[evidence_id] === evidence && evidence,
+    );
+    if (!evidence || !result) throw new Error("UNVERIFIED_EVIDENCE");
+    if (action.district === null) throw new Error("MAP_NO_LEARNING_DATA");
+    if (
+      (action.district && action.district !== evidence.districtId) ||
+      (action.metric && action.metric !== evidence.metricId)
+    )
+      throw new Error("MAP_TARGET_MISMATCH");
+    if (action.mode && result.kind !== action.mode)
+      throw new Error("MAP_RESULT_MODE_MISMATCH");
+    if (
+      JSON.stringify(normalize(result.decisions)) !==
+      JSON.stringify(ctx.decisions)
+    )
+      throw new Error("SNAPSHOT_MISMATCH");
+    if (
+      !ctx.executed.has("evaluate_scenario") ||
+      (ctx.winter && !ctx.executed.has("run_stress_test:winter_demo"))
+    )
+      throw new Error("INCOMPLETE_AUDIT");
+    if (result.kind === "experimental" && !ctx.winter)
+      throw new Error("EVENT_NOT_SELECTED");
+    if (action.seen.has(evidence_id)) return { status: "already_queued" };
+    const command = commandForEvidence(
+      randomUUID(),
+      result,
+      evidence,
+      ctx.winter,
+    );
+    action.seen.add(evidence_id);
+    return {
+      status: "queued",
+      command,
+      note: "Браузер подтвердит выполнение отдельно. Не утверждай, что переход уже выполнен.",
+    };
+  }
   if (name === "get_model_rules") {
     toolSchemas.get_model_rules.parse(args);
     ctx.rulesRead = true;

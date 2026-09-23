@@ -17,7 +17,7 @@ const request = {
   decisions: source.source_example.decisions,
   winter: true,
   question:
-    "Проверь план по заданию и при учебной зиме. Покажи оба Score и объясни изменение C1 в Сарыарке с evidence.",
+    "Покажи изменения ЖКХ в Сарыарке после зимнего события и объясни причину.",
 };
 async function audit(body) {
   const response = await fetch(`${url}/api/analyze`, {
@@ -47,19 +47,37 @@ const events = await audit(request);
 const calls = events
   .filter((e) => e.type === "tool" && e.status === "completed")
   .map((e) => e.name);
-for (const name of ["evaluate_scenario", "run_stress_test", "get_evidence"])
+for (const name of [
+  "evaluate_scenario",
+  "run_stress_test",
+  "get_evidence",
+  "show_evidence_on_map",
+])
   assert(calls.includes(name), `Missing real tool call: ${name}`);
 assert(events.some((e) => e.type === "result" && e.result.kind === "official"));
 assert(
   events.some((e) => e.type === "result" && e.result.kind === "experimental"),
 );
+const commands = events.filter((e) => e.type === "map_command");
+assert.equal(commands.length, 1, "Expected one map command");
+assert.equal(commands[0].command.districtId, "saryarka");
+assert.equal(commands[0].command.metricId, "C1");
+assert.equal(commands[0].command.mode, "experimental");
+const result = events.find(
+  (e) => e.type === "result" && e.result.id === commands[0].command.resultId,
+)?.result;
+assert.equal(result?.evidence[commands[0].command.evidenceId]?.value, 39.5);
 const runId = events.find((e) => e.type === "run").runId;
-await audit({
+const followup = await audit({
   ...request,
   runId,
   question:
     "Почему изменился B1 в Нуре? Раскрой действие меры и синергии инструментом evidence.",
 });
+assert(
+  !followup.some((e) => e.type === "map_command"),
+  "Explanation alone must not move map",
+);
 console.log(
   JSON.stringify(
     {
@@ -67,7 +85,7 @@ console.log(
       provider: "live API",
       completedTools: calls,
       followup: "verified",
-      note: "No secret values or authorization headers printed.",
+      note: "Server stream verified; actual browser application is checked separately. No secrets printed.",
     },
     null,
     2,

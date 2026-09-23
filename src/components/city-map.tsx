@@ -20,6 +20,9 @@ type Props = {
   selectedFeatureId: string;
   onSelect: (id: string) => void;
   focusRequest?: MapFocusRequest | null;
+  evidenceId?: string;
+  onBeforeFocus?: (id: string) => boolean;
+  onManualInteraction?: () => void;
   onFocusApplied?: (id: string, applied: boolean) => void;
 };
 type MapState = {
@@ -30,10 +33,19 @@ type MapState = {
   tiles: Leaflet.TileLayer;
   update: () => void;
   fit: () => void;
+  preserveViewport: () => void;
 };
 
 export function CityMap(props: Props) {
-  const { focusRequest, selectedFeatureId, onFocusApplied } = props;
+  const {
+    focusRequest,
+    selectedFeatureId,
+    onFocusApplied,
+    evidenceId,
+    metric,
+    result,
+    onBeforeFocus,
+  } = props;
   const container = useRef<HTMLDivElement>(null);
   const instance = useRef<MapState | null>(null);
   const latest = useRef(props);
@@ -216,21 +228,67 @@ export function CityMap(props: Props) {
         }).addTo(map);
         labels.set(id, marker);
       }
-      instance.current = { map, layers, labels, bounds, tiles, update, fit };
+      let userMoved = false;
+      instance.current = {
+        map,
+        layers,
+        labels,
+        bounds,
+        tiles,
+        update,
+        fit,
+        preserveViewport: () => {
+          userMoved = true;
+        },
+      };
       fit();
       update();
       map.on("zoomend", update);
       setReady(true);
-      let userMoved = false;
-      map.on("dragstart zoomstart", () => {
+      map.on("dragstart", () => {
         userMoved = true;
+        latest.current.onManualInteraction?.();
       });
+      const manualZoom = () => {
+        userMoved = true;
+        latest.current.onManualInteraction?.();
+      };
+      element.addEventListener("wheel", manualZoom, { passive: true });
+      const manualControl = (event: Event) => {
+        if ((event.target as Element).closest(".leaflet-control-zoom"))
+          manualZoom();
+      };
+      // Leaflet stops zoom-button clicks during bubbling; capture user intent first.
+      element.addEventListener("click", manualControl, true);
+      const manualKey = (event: KeyboardEvent) => {
+        if (
+          [
+            "ArrowUp",
+            "ArrowDown",
+            "ArrowLeft",
+            "ArrowRight",
+            "+",
+            "-",
+            "=",
+            "_",
+          ].includes(event.key)
+        )
+          manualZoom();
+      };
+      element.addEventListener("keydown", manualKey);
+      element.addEventListener("dblclick", manualZoom);
+      element.addEventListener("touchstart", manualZoom, { passive: true });
       const resize = new ResizeObserver(() => {
         map.invalidateSize({ pan: false });
         if (!userMoved) fit();
       });
       resize.observe(element);
       cleanup = () => {
+        element.removeEventListener("keydown", manualKey);
+        element.removeEventListener("dblclick", manualZoom);
+        element.removeEventListener("touchstart", manualZoom);
+        element.removeEventListener("wheel", manualZoom);
+        element.removeEventListener("click", manualControl, true);
         resize.disconnect();
         tiles.off();
         map.off();
@@ -258,6 +316,14 @@ export function CityMap(props: Props) {
       state = instance.current;
     if (!ready || !request || !state || processed.current.has(request.id))
       return;
+    if (
+      selectedFeatureId !== request.featureId ||
+      metric !== request.metricId ||
+      result.id !== request.resultId ||
+      evidenceId !== request.evidenceId
+    )
+      return;
+    if (onBeforeFocus && !onBeforeFocus(request.id)) return;
     processed.current.add(request.id);
     const layer = state.layers.get(request.featureId);
     if (!layer) {
@@ -265,6 +331,7 @@ export function CityMap(props: Props) {
       return;
     }
     state.map.stop();
+    state.preserveViewport();
     state.map.fitBounds(layer.getBounds(), {
       padding: [55, 60],
       maxZoom: 12.5,
@@ -275,9 +342,23 @@ export function CityMap(props: Props) {
     // the selected label and an actual Leaflet camera change have been applied.
     const applied =
       state.map.getBounds().contains(layer.getBounds().getCenter()) &&
-      selectedFeatureId === request.featureId;
+      selectedFeatureId === request.featureId &&
+      state.labels
+        .get(request.featureId)
+        ?.getElement()
+        ?.querySelector("button")
+        ?.getAttribute("aria-pressed") === "true";
     onFocusApplied?.(request.id, applied);
-  }, [ready, focusRequest, selectedFeatureId, onFocusApplied]);
+  }, [
+    ready,
+    focusRequest,
+    selectedFeatureId,
+    onFocusApplied,
+    onBeforeFocus,
+    evidenceId,
+    metric,
+    result.id,
+  ]);
 
   function toggleBasemap() {
     const state = instance.current;
@@ -294,7 +375,13 @@ export function CityMap(props: Props) {
         aria-label="Интерактивная карта районов Астаны"
       />
       <div className="map-actions">
-        <button onClick={() => instance.current?.fit()} disabled={!ready}>
+        <button
+          onClick={() => {
+            props.onManualInteraction?.();
+            instance.current?.fit();
+          }}
+          disabled={!ready}
+        >
           <Maximize2 size={14} /> Весь город
         </button>
         <button

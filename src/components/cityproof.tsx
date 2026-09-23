@@ -21,6 +21,12 @@ import {
   Info,
 } from "lucide-react";
 import { CityMap } from "./city-map";
+import { EvidencePanel } from "./evidence-panel";
+import {
+  commandForEvidence,
+  resolveMapCommand,
+  type MapCommand,
+} from "@/lib/map/commands";
 import {
   districtForFeature,
   featureForDistrict,
@@ -33,7 +39,6 @@ import {
   runStress,
   validate,
   format,
-  formatExact,
   snapshotKey,
   type Decision,
   type DistrictId,
@@ -60,6 +65,8 @@ type AuditMessage = {
   };
   evidence?: Evidence;
   runId?: string;
+  command?: MapCommand;
+  commandId?: string;
 };
 const directions = [
   "Все",
@@ -92,7 +99,12 @@ export function Cityproof() {
     [mapFocus, setMapFocus] = useState<MapFocusRequest | null>(null);
   const controller = useRef<AbortController | null>(null),
     agentScroll = useRef<HTMLDivElement | null>(null),
-    dialogRef = useRef<HTMLElement | null>(null),
+    pendingMap = useRef<{
+      command: MapCommand;
+      abort?: AbortController;
+    } | null>(null),
+    mapAllowed = useRef(true),
+    seenCommands = useRef(new Set<string>()),
     runRef = useRef<string | undefined>(undefined),
     currentKey = useRef("");
   const key = snapshotKey(decisions, winter);
@@ -136,37 +148,61 @@ export function Cityproof() {
       .catch(() => setApiReady(false));
     return () => controller.current?.abort();
   }, []);
-  useEffect(() => {
-    if (!evidence) return;
-    const previous = document.activeElement as HTMLElement | null;
-    const overflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    dialogRef.current?.querySelector<HTMLButtonElement>("button")?.focus();
-    const keydown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setEvidence(null);
-      if (event.key === "Tab") {
-        const controls = dialogRef.current?.querySelectorAll<HTMLElement>(
-          'button,a[href],input,select,textarea,[tabindex="0"]',
-        );
-        if (!controls?.length) return;
-        const first = controls[0],
-          last = controls[controls.length - 1];
-        if (event.shiftKey && document.activeElement === first) {
-          event.preventDefault();
-          last.focus();
-        } else if (!event.shiftKey && document.activeElement === last) {
-          event.preventDefault();
-          first.focus();
-        }
-      }
-    };
-    document.addEventListener("keydown", keydown);
-    return () => {
-      document.removeEventListener("keydown", keydown);
-      document.body.style.overflow = overflow;
-      previous?.focus();
-    };
-  }, [evidence]);
+  function clearMapRequest(manual = false) {
+    if (manual) mapAllowed.current = false;
+    const pending = pendingMap.current;
+    if (pending?.abort)
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.type === "map_status" &&
+          m.commandId === pending.command.id &&
+          m.status === "requested"
+            ? {
+                ...m,
+                status: "cancelled",
+                text: "Ожидавшийся переход отменён. Текущее управление картой сохранено.",
+              }
+            : m,
+        ),
+      );
+    pendingMap.current = null;
+    setMapFocus(null);
+  }
+  function selectMapState(update: () => void) {
+    clearMapRequest(true);
+    setEvidence(null);
+    update();
+  }
+  function mayApplyMap(id: string) {
+    const pending = pendingMap.current;
+    return (
+      !!pending &&
+      pending.command.id === id &&
+      pending.command.snapshotKey === currentKey.current &&
+      (!pending.abort ||
+        (!pending.abort.signal.aborted &&
+          controller.current === pending.abort &&
+          mapAllowed.current))
+    );
+  }
+  function mapApplied(id: string, applied: boolean) {
+    if (!mayApplyMap(id)) return;
+    const pending = pendingMap.current!;
+    if (pending.abort)
+      setMessages((prev) => [
+        ...prev,
+        {
+          type: "map_status",
+          commandId: id,
+          status: applied ? "applied" : "failed",
+          text: applied
+            ? "Показано на карте: район, показатель, режим и вычисление подтверждены браузером."
+            : "Карта не подтвердила переход. Вычисление доступно в ответе.",
+        },
+      ]);
+    pendingMap.current = null;
+    setMapFocus(null);
+  }
   function changePlan(next: Decision[]) {
     currentKey.current = snapshotKey(next, winter);
     controller.current?.abort();
@@ -176,7 +212,7 @@ export function Cityproof() {
       evaluateScenario({ decisions: next }).valid ? "official" : "baseline",
     );
     setEvidence(null);
-    setMapFocus(null);
+    clearMapRequest();
     setMessages([]);
     setAuditResults({});
     setError("");
@@ -199,16 +235,27 @@ export function Cityproof() {
       },
     ]);
   }
-  function showEvidence(e: Evidence, focusMap = false) {
-    setEvidence(e);
-    setDistrict(e.districtId);
-    setMetric(e.metricId);
-    setMode(e.id.includes("winter_demo") ? "experimental" : "official");
-    if (focusMap)
-      setMapFocus({
-        id: crypto.randomUUID(),
-        featureId: featureForDistrict(e.districtId).mapFeatureId,
-      });
+  function showEvidence(
+    e: Evidence,
+    focusMap = false,
+    command?: MapCommand,
+    abort?: AbortController,
+  ) {
+    const parent = [official, stress].find((r) => r?.evidence[e.id]);
+    if (!parent || (parent.kind === "experimental" && !winter)) return;
+    const canonical = parent.evidence[e.id];
+    if (!command) clearMapRequest(true);
+    setEvidence(canonical);
+    setDistrict(canonical.districtId);
+    setMetric(canonical.metricId);
+    setMode(parent.kind === "experimental" ? "experimental" : "official");
+    if (focusMap) {
+      const target =
+        command ??
+        commandForEvidence(crypto.randomUUID(), parent, canonical, winter);
+      pendingMap.current = { command: target, abort };
+      setMapFocus(target);
+    }
   }
   async function analyze(prompt?: string) {
     if (!official) {
@@ -219,6 +266,10 @@ export function Cityproof() {
     const abort = new AbortController();
     controller.current = abort;
     const requestKey = key;
+    clearMapRequest();
+    mapAllowed.current = true;
+    seenCommands.current.clear();
+    setEvidence(null);
     setBusy(true);
     setError("");
     setMessages([]);
@@ -260,11 +311,51 @@ export function Cityproof() {
         for (const line of lines) {
           if (!line.trim()) continue;
           const event = JSON.parse(line) as AuditMessage;
-          if (currentKey.current !== requestKey || controller.current !== abort)
+          if (
+            abort.signal.aborted ||
+            currentKey.current !== requestKey ||
+            controller.current !== abort
+          )
             continue;
           if (event.type === "error") throw new Error(event.text);
           if (event.type === "answer") gotAnswer = true;
           if (event.runId) runRef.current = event.runId;
+          if (event.type === "map_command") {
+            const resolved = resolveMapCommand(
+              event.command,
+              requestKey,
+              [
+                evaluation.valid ? evaluation.result : null,
+                winter && experimental.valid ? experimental.result : null,
+              ].filter((r): r is Result => !!r),
+            );
+            if (!resolved || seenCommands.current.has(resolved.command.id))
+              continue;
+            seenCommands.current.add(resolved.command.id);
+            if (!mapAllowed.current) {
+              setMessages((prev) => [
+                ...prev,
+                {
+                  type: "map_status",
+                  commandId: resolved.command.id,
+                  status: "cancelled",
+                  text: "Команда получена, но переход отменён: вы изменили карту вручную.",
+                },
+              ]);
+              continue;
+            }
+            setMessages((prev) => [
+              ...prev,
+              {
+                type: "map_status",
+                commandId: resolved.command.id,
+                status: "requested",
+                text: "Агент запросил показ на карте.",
+              },
+            ]);
+            showEvidence(resolved.evidence, true, resolved.command, abort);
+            continue;
+          }
           setMessages((prev) => [...prev, event]);
           if (event.type === "result" && event.result) {
             const serverResult = event.result;
@@ -272,11 +363,6 @@ export function Cityproof() {
               ...prev,
               [serverResult.kind]: serverResult,
             }));
-            setMode(
-              event.result.kind === "experimental"
-                ? "experimental"
-                : "official",
-            );
           }
         }
       }
@@ -381,7 +467,9 @@ export function Cityproof() {
             <select
               id="target"
               value={district ?? ""}
-              onChange={(e) => setDistrict(e.target.value as DistrictId)}
+              onChange={(e) =>
+                selectMapState(() => setDistrict(e.target.value as DistrictId))
+              }
             >
               {!district && (
                 <option value="" disabled>
@@ -524,21 +612,21 @@ export function Cityproof() {
             <div className="segmented" aria-label="Режим карты">
               <button
                 className={mode === "baseline" ? "active" : ""}
-                onClick={() => setMode("baseline")}
+                onClick={() => selectMapState(() => setMode("baseline"))}
               >
                 Исходное
               </button>
               <button
                 disabled={!official}
                 className={mode === "official" ? "active" : ""}
-                onClick={() => setMode("official")}
+                onClick={() => selectMapState(() => setMode("official"))}
               >
                 После решений
               </button>
               <button
-                disabled={!stress}
+                disabled={!stress || !winter}
                 className={mode === "experimental" ? "active" : ""}
-                onClick={() => setMode("experimental")}
+                onClick={() => selectMapState(() => setMode("experimental"))}
               >
                 <Snowflake size={12} />
                 Учебная зима
@@ -547,7 +635,9 @@ export function Cityproof() {
             <select
               aria-label="Показатель на карте"
               value={metric}
-              onChange={(e) => setMetric(e.target.value as MetricId)}
+              onChange={(e) =>
+                selectMapState(() => setMetric(e.target.value as MetricId))
+              }
             >
               {model.metrics.map((m) => (
                 <option key={m.id} value={m.id}>
@@ -563,83 +653,106 @@ export function Cityproof() {
             onSelect={(id) => {
               const d = districtForFeature(id);
               if (d) {
-                setDistrict(d.modelDistrictId);
-                setEvidence(null);
+                selectMapState(() => setDistrict(d.modelDistrictId));
               }
             }}
             focusRequest={mapFocus}
+            evidenceId={evidence?.id}
+            onBeforeFocus={mayApplyMap}
+            onFocusApplied={mapApplied}
+            onManualInteraction={() => clearMapRequest(true)}
           />
-          <div className="district-strip">
-            <div className="district-title">
-              <span className="eyebrow">В ФОКУСЕ</span>
-              <strong>{selectedDistrict.name}</strong>
-              <span>
-                {!district
-                  ? "География OSM"
-                  : mode === "experimental"
-                    ? "Учебное событие"
-                    : mode === "official"
-                      ? "После решений"
-                      : "Исходные данные"}
-              </span>
-            </div>
-            {district ? (
-              <div className="metric-grid">
-                {model.metrics.map((m) => (
-                  <button
-                    key={m.id}
-                    className={`${metric === m.id ? "active" : ""} ${result.indicators[district][m.id] < 40 ? "critical" : ""}`}
-                    title={m.name}
-                    onClick={() => {
-                      setMetric(m.id);
-                      if (result.kind !== "baseline")
-                        showEvidence(
-                          result.evidence[`${result.id}:${district}:${m.id}`],
-                        );
-                    }}
-                  >
-                    <span>{m.id}</span>
-                    <strong>{format(result.indicators[district][m.id])}</strong>
-                  </button>
-                ))}
+          {!evidence && (
+            <>
+              <div className="district-strip">
+                <div className="district-title">
+                  <span className="eyebrow">В ФОКУСЕ</span>
+                  <strong>{selectedDistrict.name}</strong>
+                  <span>
+                    {!district
+                      ? "География OSM"
+                      : mode === "experimental"
+                        ? "Учебное событие"
+                        : mode === "official"
+                          ? "После решений"
+                          : "Исходные данные"}
+                  </span>
+                </div>
+                {district ? (
+                  <div className="metric-grid">
+                    {model.metrics.map((m) => (
+                      <button
+                        key={m.id}
+                        className={`${metric === m.id ? "active" : ""} ${result.indicators[district][m.id] < 40 ? "critical" : ""}`}
+                        title={m.name}
+                        onClick={() => {
+                          selectMapState(() => setMetric(m.id));
+                          if (result.kind !== "baseline")
+                            showEvidence(
+                              result.evidence[
+                                `${result.id}:${district}:${m.id}`
+                              ],
+                            );
+                        }}
+                      >
+                        <span>{m.id}</span>
+                        <strong>
+                          {format(result.indicators[district][m.id])}
+                        </strong>
+                      </button>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="district-no-data">
+                    <strong>Не входит в учебный набор данных</strong>
+                    <span>
+                      Показатели отсутствуют. Мероприятия этому району не
+                      назначаются.
+                    </span>
+                  </div>
+                )}
               </div>
-            ) : (
-              <div className="district-no-data">
-                <strong>Не входит в учебный набор данных</strong>
-                <span>
-                  Показатели отсутствуют. Мероприятия этому району не
-                  назначаются.
-                </span>
+              <div className="result-strip">
+                <div>
+                  <span>
+                    {mode === "experimental"
+                      ? "Учебный результат"
+                      : mode === "baseline"
+                        ? "Исходный ориентир"
+                        : "Результат по заданию"}
+                  </span>
+                  <strong>
+                    {official ? format(result.score) : "—"}
+                    <small>Score</small>
+                  </strong>
+                </div>
+                <div>
+                  <span>Среднее города</span>
+                  <strong>{official ? format(result.cityMean) : "—"}</strong>
+                </div>
+                <div>
+                  <span>Минимум по районам</span>
+                  <strong>{official ? format(result.minimum) : "—"}</strong>
+                </div>
+                <div>
+                  <span>Значений ниже 40</span>
+                  <strong>
+                    {official ? result.criticalPairs.length : "—"}
+                  </strong>
+                </div>
               </div>
-            )}
-          </div>
-          <div className="result-strip">
-            <div>
-              <span>
-                {mode === "experimental"
-                  ? "Учебный результат"
-                  : mode === "baseline"
-                    ? "Исходный ориентир"
-                    : "Результат по заданию"}
-              </span>
-              <strong>
-                {official ? format(result.score) : "—"}
-                <small>Score</small>
-              </strong>
-            </div>
-            <div>
-              <span>Среднее города</span>
-              <strong>{official ? format(result.cityMean) : "—"}</strong>
-            </div>
-            <div>
-              <span>Минимум по районам</span>
-              <strong>{official ? format(result.minimum) : "—"}</strong>
-            </div>
-            <div>
-              <span>Значений ниже 40</span>
-              <strong>{official ? result.criticalPairs.length : "—"}</strong>
-            </div>
-          </div>
+            </>
+          )}
+          {evidence && (
+            <EvidencePanel
+              evidence={evidence}
+              experimental={mode === "experimental"}
+              onClose={() => {
+                clearMapRequest(true);
+                setEvidence(null);
+              }}
+            />
+          )}
           <p className="geography-note">
             Учебные показатели одноимённых районов, не статистика реальных
             территорий.
@@ -710,6 +823,9 @@ export function Cityproof() {
                   currentKey.current = snapshotKey(decisions, e.target.checked);
                   controller.current?.abort();
                   setBusy(false);
+                  clearMapRequest();
+                  setEvidence(null);
+                  setMode(official ? "official" : "baseline");
                   setWinter(e.target.checked);
                   setMessages([]);
                   setAuditResults({});
@@ -753,7 +869,9 @@ export function Cityproof() {
                       <code>{m.name}</code>
                       <span>
                         {m.status === "completed"
-                          ? "Готово"
+                          ? m.name === "show_evidence_on_map"
+                            ? "Отправлено"
+                            : "Готово"
                           : m.status === "failed"
                             ? "Ошибка"
                             : "Начат"}
@@ -765,6 +883,17 @@ export function Cityproof() {
                   ))}
               </div>
             )}
+            {messages
+              .filter((m) => m.type === "map_status")
+              .map((m, i) => (
+                <p
+                  className={`map-action-status ${m.status}`}
+                  role="status"
+                  key={i}
+                >
+                  {m.text}
+                </p>
+              ))}
             {answer && (
               <div className="answer">
                 <h3>Ответ по данным модели</h3>
@@ -806,7 +935,7 @@ export function Cityproof() {
               disabled={!district}
               onClick={() =>
                 setQuestion(
-                  `Объясни показатель ${metric} в районе ${selectedDistrict.name} и покажи расчёт.`,
+                  `Объясни показатель ${metric} в районе ${selectedDistrict.name} и объясни расчёт.`,
                 )
               }
             >
@@ -826,7 +955,11 @@ export function Cityproof() {
               className="primary-button"
               disabled={!official}
               onClick={() =>
-                busy ? controller.current?.abort() : void analyze()
+                busy
+                  ? (controller.current?.abort(),
+                    clearMapRequest(),
+                    setBusy(false))
+                  : void analyze()
               }
             >
               {busy ? (
@@ -855,79 +988,6 @@ export function Cityproof() {
         </span>
         <span>Модель {model.schema_version}</span>
       </footer>
-      {evidence && (
-        <div className="drawer-backdrop" onClick={() => setEvidence(null)}>
-          <section
-            className="evidence-drawer"
-            ref={dialogRef}
-            role="dialog"
-            aria-modal="true"
-            aria-label="Происхождение числа"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <button
-              className="icon-button close"
-              aria-label="Закрыть расчёт"
-              onClick={() => setEvidence(null)}
-            >
-              <X size={20} />
-            </button>
-            <span className="eyebrow">ОТКУДА ЧИСЛО</span>
-            <h2>
-              {selectedDistrict.name} / {evidence.metricId}
-            </h2>
-            <p>{model.metrics.find((m) => m.id === evidence.metricId)?.name}</p>
-            <div className="evidence-total">
-              {format(evidence.value)}
-              <span>пунктов индекса</span>
-            </div>
-            <div className="ledger-row">
-              <span>
-                {evidence.id.includes("winter_demo")
-                  ? "После официального расчёта"
-                  : "Исходное значение"}
-              </span>
-              <b>{formatExact(evidence.initial)}</b>
-            </div>
-            {evidence.contributions.map((c, i) => (
-              <div className="ledger-row" key={i}>
-                <span>
-                  {c.measureId} · {c.name}
-                  <small>
-                    {c.kind === "measure"
-                      ? `${formatExact(c.full)} × ${formatExact(c.factor)} (доля эффекта с учётом лага)`
-                      : c.kind === "synergy"
-                        ? "Фиксированный бонус без лага"
-                        : "Учебное допущение команды"}
-                  </small>
-                </span>
-                <b>
-                  {c.delta > 0 ? "+" : ""}
-                  {formatExact(c.delta)}
-                </b>
-              </div>
-            ))}
-            {evidence.contributions.length === 0 && (
-              <p>Выбранные меры не меняют этот показатель.</p>
-            )}
-            <div className="ledger-row">
-              <span>Сумма до ограничения</span>
-              <b>{formatExact(evidence.beforeClip)}</b>
-            </div>
-            <div className="ledger-row">
-              <span>После ограничения [0, 100]</span>
-              <b>{formatExact(evidence.value)}</b>
-            </div>
-            <p className="evidence-source">
-              Источник:{" "}
-              {evidence.id.includes("winter_demo")
-                ? "stress_events.json · winter_demo 1.0"
-                : "Датасет организаторов · разделы 2–3"}
-              . Результат относится только к выбранным условиям.
-            </p>
-          </section>
-        </div>
-      )}
     </div>
   );
 }

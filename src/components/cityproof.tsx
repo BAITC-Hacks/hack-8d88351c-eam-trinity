@@ -20,7 +20,12 @@ import {
   Activity,
   Info,
 } from "lucide-react";
-import { CityScene } from "./city-scene";
+import { CityMap } from "./city-map";
+import {
+  districtForFeature,
+  featureForDistrict,
+  type MapFocusRequest,
+} from "@/lib/map/geography";
 import {
   model,
   computeBaseline,
@@ -67,7 +72,7 @@ const directions = [
 const baseline = computeBaseline();
 export function Cityproof() {
   const [decisions, setDecisions] = useState<Decision[]>([]),
-    [district, setDistrict] = useState<DistrictId>("nura"),
+    [district, setDistrict] = useState<DistrictId | null>("nura"),
     [metric, setMetric] = useState<MetricId>("C1"),
     [filter, setFilter] = useState("Все"),
     [mode, setMode] = useState<"baseline" | "official" | "experimental">(
@@ -83,7 +88,8 @@ export function Cityproof() {
     [error, setError] = useState(""),
     [evidence, setEvidence] = useState<Evidence | null>(null),
     [apiReady, setApiReady] = useState<boolean | null>(null),
-    [tab, setTab] = useState<"catalog" | "agent">("catalog");
+    [tab, setTab] = useState<"catalog" | "agent">("catalog"),
+    [mapFocus, setMapFocus] = useState<MapFocusRequest | null>(null);
   const controller = useRef<AbortController | null>(null),
     agentScroll = useRef<HTMLDivElement | null>(null),
     dialogRef = useRef<HTMLElement | null>(null),
@@ -122,8 +128,7 @@ export function Cityproof() {
     0,
   );
   const issues = validate({ decisions });
-  const selectedDistrict = model.districts.find((d) => d.id === district)!;
-  const selectedMetric = model.metrics.find((m) => m.id === metric)!;
+  const selectedDistrict = featureForDistrict(district);
   useEffect(() => {
     fetch("/api/analyze")
       .then((r) => r.json())
@@ -171,6 +176,7 @@ export function Cityproof() {
       evaluateScenario({ decisions: next }).valid ? "official" : "baseline",
     );
     setEvidence(null);
+    setMapFocus(null);
     setMessages([]);
     setAuditResults({});
     setError("");
@@ -182,19 +188,27 @@ export function Cityproof() {
       changePlan(decisions.filter((d) => d.measure_id !== id));
       return;
     }
+    if (m.scope === "district" && !district) return;
     changePlan([
       ...decisions,
       {
         measure_id: id,
-        ...(m.scope === "district" ? { district_id: district } : {}),
+        ...(m.scope === "district" && district
+          ? { district_id: district }
+          : {}),
       },
     ]);
   }
-  function showEvidence(e: Evidence) {
+  function showEvidence(e: Evidence, focusMap = false) {
     setEvidence(e);
     setDistrict(e.districtId);
     setMetric(e.metricId);
     setMode(e.id.includes("winter_demo") ? "experimental" : "official");
+    if (focusMap)
+      setMapFocus({
+        id: crypto.randomUUID(),
+        featureId: featureForDistrict(e.districtId).mapFeatureId,
+      });
   }
   async function analyze(prompt?: string) {
     if (!official) {
@@ -220,7 +234,9 @@ export function Cityproof() {
             question ||
             `Проверь мой план в обычных условиях${winter ? " и при учебной зиме" : ""}. Объясни основные изменения.`,
           winter,
-          focus: { district_id: district, metric_id: metric },
+          ...(district
+            ? { focus: { district_id: district, metric_id: metric } }
+            : {}),
           runId: runRef.current,
         }),
         signal: abort.signal,
@@ -309,18 +325,6 @@ export function Cityproof() {
         <div className="study-badge">
           <span /> Учебная модель
         </div>
-        <div
-          className="header-budget"
-          aria-label={`Бюджет ${cost} из 100. Выбрано ${decisions.length} из 5 решений`}
-        >
-          <span>
-            <b className={cost > 100 ? "warning" : ""}>{cost}</b> / 100{" "}
-            <small>бюджет</small>
-          </span>
-          <span>
-            <b>{decisions.length}</b> / 5 <small>решений</small>
-          </span>
-        </div>
         <button
           className="icon-button"
           title="Сбросить план"
@@ -376,9 +380,14 @@ export function Cityproof() {
             <label htmlFor="target">Район для новой меры</label>
             <select
               id="target"
-              value={district}
+              value={district ?? ""}
               onChange={(e) => setDistrict(e.target.value as DistrictId)}
             >
+              {!district && (
+                <option value="" disabled>
+                  Выберите район с учебными данными
+                </option>
+              )}
               {model.districts.map((d) => (
                 <option key={d.id} value={d.id}>
                   {d.name}
@@ -436,7 +445,11 @@ export function Cityproof() {
                     <button
                       className="measure-select"
                       onClick={() => toggle(m.id)}
-                      disabled={!selected && decisions.length >= 5}
+                      disabled={
+                        !selected &&
+                        (decisions.length >= 5 ||
+                          (m.scope === "district" && !district))
+                      }
                       aria-label={`${selected ? "Удалить" : "Добавить"} ${m.id}: ${m.name}`}
                     >
                       <span>{m.name}</span>
@@ -503,23 +516,12 @@ export function Cityproof() {
           </div>
         </aside>
         <section className="city-workspace">
-          <div className="city-heading">
-            <div>
-              <div className="eyebrow">
-                <span className="live-dot" /> ГОРОД БУДУЩЕГО · РЕШЕНИЯ СЕГОДНЯ
-              </div>
-              <h1>
-                Астана. <br />
-                <em>Сценарии будущего.</em>
-              </h1>
-              <p>Измените условия. Проверьте результат.</p>
-            </div>
-            <div className="scene-index">
-              05<span>районов</span>
-            </div>
+          <div className="map-heading">
+            <h1>Астана</h1>
+            <span>Карта районов · учебные сценарии</span>
           </div>
           <div className="scene-controls">
-            <div className="segmented" aria-label="Режим сцены">
+            <div className="segmented" aria-label="Режим карты">
               <button
                 className={mode === "baseline" ? "active" : ""}
                 onClick={() => setMode("baseline")}
@@ -543,7 +545,7 @@ export function Cityproof() {
               </button>
             </div>
             <select
-              aria-label="Показатель на сцене"
+              aria-label="Показатель на карте"
               value={metric}
               onChange={(e) => setMetric(e.target.value as MetricId)}
             >
@@ -554,69 +556,62 @@ export function Cityproof() {
               ))}
             </select>
           </div>
-          <div className="scene-wrap">
-            <CityScene
-              result={result}
-              selected={district}
-              metric={metric}
-              decisions={decisions}
-              onSelect={setDistrict}
-            />
-            <div className="scene-note">
-              <Layers3 size={13} /> Условная схема пяти районов
-            </div>
-            <div className="scene-legend">
-              <span>
-                <i />
-                40–100
-              </span>
-              <span>
-                <i className="amber" />
-                ниже 40
-              </span>
-              <small>{selectedMetric.id} · пункты индекса</small>
-            </div>
-            {decisions.some((d) => !d.district_id) && (
-              <div className="city-measures">
-                <Globe2 size={12} /> Городские меры:{" "}
-                {decisions
-                  .filter((d) => !d.district_id)
-                  .map((d) => d.measure_id)
-                  .join(" · ")}
-              </div>
-            )}
-          </div>
+          <CityMap
+            result={result}
+            metric={metric}
+            selectedFeatureId={selectedDistrict.mapFeatureId}
+            onSelect={(id) => {
+              const d = districtForFeature(id);
+              if (d) {
+                setDistrict(d.modelDistrictId);
+                setEvidence(null);
+              }
+            }}
+            focusRequest={mapFocus}
+          />
           <div className="district-strip">
             <div className="district-title">
               <span className="eyebrow">В ФОКУСЕ</span>
               <strong>{selectedDistrict.name}</strong>
               <span>
-                {mode === "experimental"
-                  ? "Учебное событие"
-                  : mode === "official"
-                    ? "После решений"
-                    : "Исходные данные"}
+                {!district
+                  ? "География OSM"
+                  : mode === "experimental"
+                    ? "Учебное событие"
+                    : mode === "official"
+                      ? "После решений"
+                      : "Исходные данные"}
               </span>
             </div>
-            <div className="metric-grid">
-              {model.metrics.map((m) => (
-                <button
-                  key={m.id}
-                  className={`${metric === m.id ? "active" : ""} ${result.indicators[district][m.id] < 40 ? "critical" : ""}`}
-                  title={m.name}
-                  onClick={() => {
-                    setMetric(m.id);
-                    if (result.kind !== "baseline")
-                      showEvidence(
-                        result.evidence[`${result.id}:${district}:${m.id}`],
-                      );
-                  }}
-                >
-                  <span>{m.id}</span>
-                  <strong>{format(result.indicators[district][m.id])}</strong>
-                </button>
-              ))}
-            </div>
+            {district ? (
+              <div className="metric-grid">
+                {model.metrics.map((m) => (
+                  <button
+                    key={m.id}
+                    className={`${metric === m.id ? "active" : ""} ${result.indicators[district][m.id] < 40 ? "critical" : ""}`}
+                    title={m.name}
+                    onClick={() => {
+                      setMetric(m.id);
+                      if (result.kind !== "baseline")
+                        showEvidence(
+                          result.evidence[`${result.id}:${district}:${m.id}`],
+                        );
+                    }}
+                  >
+                    <span>{m.id}</span>
+                    <strong>{format(result.indicators[district][m.id])}</strong>
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <div className="district-no-data">
+                <strong>Не входит в учебный набор данных</strong>
+                <span>
+                  Показатели отсутствуют. Мероприятия этому району не
+                  назначаются.
+                </span>
+              </div>
+            )}
           </div>
           <div className="result-strip">
             <div>
@@ -645,6 +640,10 @@ export function Cityproof() {
               <strong>{official ? result.criticalPairs.length : "—"}</strong>
             </div>
           </div>
+          <p className="geography-note">
+            Учебные показатели одноимённых районов, не статистика реальных
+            территорий.
+          </p>
           <div className="context-note">
             <Info size={13} />
             {official
@@ -653,7 +652,7 @@ export function Cityproof() {
                 : mode === "baseline"
                   ? "Исходное состояние для сравнения. Это не пользовательский план."
                   : "Официальный расчёт по данным задания. Горизонт: 8 кварталов."
-              : "Выберите пять допустимых мер, чтобы получить результат. Сцена пока показывает исходные данные."}
+              : "Выберите пять допустимых мер, чтобы получить результат. Карта пока показывает исходные учебные данные."}
           </div>
         </section>
         <aside
@@ -776,14 +775,18 @@ export function Cityproof() {
                     disabled={!f.evidenceId}
                     onClick={() => {
                       const e = allEvidence.find((e) => e.id === f.evidenceId);
-                      if (e) showEvidence(e);
+                      if (e) showEvidence(e, true);
                     }}
                   >
                     <span>
                       {f.label}
                       <strong>{f.value}</strong>
                     </span>
-                    {f.evidenceId && <ChevronRight size={15} />}
+                    {f.evidenceId && (
+                      <span className="show-map-action">
+                        Показать на карте <ChevronRight size={13} />
+                      </span>
+                    )}
                   </button>
                 ))}
                 {answer.limitations.map((l, i) => (
@@ -800,6 +803,7 @@ export function Cityproof() {
           <div className="agent-compose">
             <button
               className="quick-question"
+              disabled={!district}
               onClick={() =>
                 setQuestion(
                   `Объясни показатель ${metric} в районе ${selectedDistrict.name} и покажи расчёт.`,

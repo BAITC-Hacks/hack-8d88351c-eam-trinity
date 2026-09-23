@@ -1,0 +1,196 @@
+{
+  "retrievedAt": "2026-09-23T11:24:02.615Z",
+  "validation": "Valid Polygon/MultiPolygon; rings closed; Astana coordinates; labels inside; consistent shared OSM objects",
+  "districts": [
+    {
+      "mapFeatureId": "relation/3479876",
+      "name": "Есиль",
+      "modelDistrictId": "esil",
+      "sourceName": "Есіл ауданы",
+      "sourceNameRu": "район Есиль",
+      "relationId": 3479876,
+      "relationVersion": 35,
+      "relationTimestamp": "2026-04-27T06:11:19Z",
+      "latestMemberEdit": "2026-09-21T11:50:42Z",
+      "retrievedAt": "2026-09-23T11:24:02.615Z",
+      "areaKm2": 193.85030261541286,
+      "label": [
+        71.46466050224612,
+        51.048044131663445
+      ]
+    },
+    {
+      "mapFeatureId": "relation/3482819",
+      "name": "Алматы",
+      "modelDistrictId": "almaty",
+      "sourceName": "Алматы ауданы",
+      "sourceNameRu": "район Алматы",
+      "relationId": 3482819,
+      "relationVersion": 47,
+      "relationTimestamp": "2026-09-21T13:44:01Z",
+      "latestMemberEdit": "2026-09-21T13:44:01Z",
+      "retrievedAt": "2026-09-23T11:24:02.615Z",
+      "areaKm2": 93.0376867768135,
+      "label": [
+        71.5820502756633,
+        51.1647208972452
+      ]
+    },
+    {
+      "mapFeatureId": "relation/3486954",
+      "name": "Сарыарка",
+      "modelDistrictId": "saryarka",
+      "sourceName": "Сарыарқа ауданы",
+      "sourceNameRu": "район Сарыарка",
+      "relationId": 3486954,
+      "relationVersion": 23,
+      "relationTimestamp": "2025-12-22T05:45:06Z",
+      "latestMemberEdit": "2026-09-08T16:42:27Z",
+      "retrievedAt": "2026-09-23T11:24:02.615Z",
+      "areaKm2": 67.57260361232177,
+      "label": [
+        71.28183470538147,
+        51.212765001974525
+      ]
+    },
+    {
+      "mapFeatureId": "relation/8593081",
+      "name": "Байконыр",
+      "modelDistrictId": "baikonur",
+      "sourceName": "Байқоңыр ауданы",
+      "sourceNameRu": "район Байконур",
+      "relationId": 8593081,
+      "relationVersion": 14,
+      "relationTimestamp": "2025-12-22T05:45:06Z",
+      "latestMemberEdit": "2026-09-08T16:42:27Z",
+      "retrievedAt": "2026-09-23T11:24:02.615Z",
+      "areaKm2": 182.82791333999012,
+      "label": [
+        71.47684246081728,
+        51.219173214624774
+      ]
+    },
+    {
+      "mapFeatureId": "relation/20593940",
+      "name": "Нура",
+      "modelDistrictId": "nura",
+      "sourceName": "Нұра ауданы",
+      "sourceNameRu": "район Нура",
+      "relationId": 20593940,
+      "relationVersion": 1,
+      "relationTimestamp": "2026-04-27T06:11:19Z",
+      "latestMemberEdit": "2026-09-21T11:50:42Z",
+      "retrievedAt": "2026-09-23T11:24:02.615Z",
+      "areaKm2": 187.8876293299284,
+      "label": [
+        71.31744190701292,
+        51.10747822548332
+      ]
+    },
+    {
+      "mapFeatureId": "relation/19733918",
+      "name": "Сарайшық",
+      "modelDistrictId": null,
+      "sourceName": "Сарайшық ауданы",
+      "sourceNameRu": "район Сарайшык",
+      "relationId": 19733918,
+      "relationVersion": 17,
+      "relationTimestamp": "2026-09-21T13:44:01Z",
+      "latestMemberEdit": "2026-09-21T13:44:01Z",
+      "retrievedAt": "2026-09-23T11:24:02.615Z",
+      "areaKm2": 61.20194450590307,
+      "label": [
+        71.559690165325,
+        51.11829489186392
+      ]
+    }
+  ],
+  "pairwiseOverlapKm2": [
+    {
+      "a": "relation/3479876",
+      "b": "relation/3482819",
+      "area": 0
+    },
+    {
+      "a": "relation/3479876",
+      "b": "relation/3486954",
+      "area": 0
+    },
+    {
+      "a": "relation/3479876",
+      "b": "relation/8593081",
+      "area": 0
+    },
+    {
+      "a": "relation/3479876",
+      "b": "relation/20593940",
+      "area": 0
+    },
+    {
+      "a": "relation/3479876",
+      "b": "relation/19733918",
+      "area": 0
+    },
+    {
+      "a": "relation/3482819",
+      "b": "relation/3486954",
+      "area": 0
+    },
+    {
+      "a": "relation/3482819",
+      "b": "relation/8593081",
+      "area": 0
+    },
+    {
+      "a": "relation/3482819",
+      "b": "relation/20593940",
+      "area": 0
+    },
+    {
+      "a": "relation/3482819",
+      "b": "relation/19733918",
+      "area": 0
+    },
+    {
+      "a": "relation/3486954",
+      "b": "relation/8593081",
+      "area": 0
+    },
+    {
+      "a": "relation/3486954",
+      "b": "relation/20593940",
+      "area": 0
+    },
+    {
+      "a": "relation/3486954",
+      "b": "relation/19733918",
+      "area": 0
+    },
+    {
+      "a": "relation/8593081",
+      "b": "relation/20593940",
+      "area": 0
+    },
+    {
+      "a": "relation/8593081",
+      "b": "relation/19733918",
+      "area": 0
+    },
+    {
+      "a": "relation/20593940",
+      "b": "relation/19733918",
+      "area": 0
+    }
+  ],
+  "cityAreaKm2": 797.3727937167498,
+  "uncoveredCityAreaKm2": 10.994713536579013,
+  "sourceHashes": {
+    "relation-3479876.json": "d0d266aac58fd209f3283aa5ea1c149f3f5f72dce8e8bb29d76180aaa87045a1",
+    "relation-3482819.json": "b8409136440252b4dfbf5fc2b3165b4d1c5c82fa99e14bc98a44069faa45778a",
+    "relation-3486954.json": "67d2e9108e59e0fa6601c86ab09f52386884b1badac1c4bd7be89f1b3f635bee",
+    "relation-8593081.json": "6d69958548968e04601d009aeadb9241efdc0861c4781cf5f7e2499ced5c084b",
+    "relation-20593940.json": "ca74f6b5307bd1f8307812e9473f32b0034c9573f8a2e106ed39747dea076776",
+    "relation-19733918.json": "7c84bb2043f1e44ddd3642f8dd5e1ff73c41d27308ab4eea7f2a2d1b8a5103cb",
+    "relation-3087155.json": "8964d5ad24b7186ed9ca5665e0dcc63f73635053b844ccde0f221fffb7865405"
+  }
+}

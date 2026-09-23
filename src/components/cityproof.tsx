@@ -95,7 +95,7 @@ export function Cityproof() {
   }, [key]);
   useEffect(() => {
     const node = agentScroll.current;
-    if (node) node.scrollTop = node.scrollHeight;
+    if (node) node.scrollTop = messages.length || error ? node.scrollHeight : 0;
   }, [messages, error]);
   const evaluation = useMemo(
     () => evaluateScenario({ decisions }),
@@ -304,7 +304,7 @@ export function Cityproof() {
           <sup>LAB</sup>
         </Link>
         <div className="top-caption">
-          Аким на 5 часов<span>/</span>Лаборатория городских сценариев
+          АСТАНА<span>/</span>Лаборатория городских сценариев
         </div>
         <div className="study-badge">
           <span /> Учебная модель
@@ -506,12 +506,11 @@ export function Cityproof() {
           <div className="city-heading">
             <div>
               <div className="eyebrow">
-                <span className="live-dot" /> ГОРОД КАК СИСТЕМА
+                <span className="live-dot" /> ГОРОД БУДУЩЕГО · РЕШЕНИЯ СЕГОДНЯ
               </div>
               <h1>
-                У каждого решения
-                <br />
-                есть <em>последствия.</em>
+                Астана. <br />
+                <em>Сценарии будущего.</em>
               </h1>
               <p>Измените условия. Проверьте результат.</p>
             </div>

@@ -57,8 +57,8 @@ export function districtStyle(
 ) {
   return {
     fillColor: metricColor(value),
-    fillOpacity: value === null ? 0.85 : 0.7,
-    color: selected ? "#174cad" : hovered ? "#4884dc" : "#6a91c4",
+    fillOpacity: value === null ? 0.85 : 0.55,
+    color: selected ? "#174cad" : hovered ? "#4884dc" : "#9bb4d4",
     weight: selected ? 4 : hovered ? 3 : 1.4,
     dashArray: value === null && !selected ? "4 4" : undefined,
   };

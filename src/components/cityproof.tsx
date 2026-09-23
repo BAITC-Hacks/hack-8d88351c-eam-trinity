@@ -15,13 +15,15 @@ import {
   Globe2,
   Clock3,
   Snowflake,
-  ChevronRight,
   Square,
   Activity,
   Info,
 } from "lucide-react";
 import { CityMap } from "./city-map";
 import { EvidencePanel } from "./evidence-panel";
+import { AgentConversation } from "./agent-conversation";
+import { restoreTranscript, type ChatTurn } from "@/lib/ai/chat";
+import type { Answer } from "@/lib/ai/explanation";
 import {
   commandForEvidence,
   resolveMapCommand,
@@ -53,16 +55,7 @@ type AuditMessage = {
   durationMs?: number;
   text?: string;
   result?: Result;
-  answer?: {
-    summary: string;
-    facts: {
-      label: string;
-      value: string;
-      evidenceId?: string;
-      resultId?: string;
-    }[];
-    limitations: string[];
-  };
+  answer?: Answer;
   evidence?: Evidence;
   runId?: string;
   command?: MapCommand;
@@ -88,20 +81,25 @@ export function Cityproof() {
     [winter, setWinter] = useState(true),
     [question, setQuestion] = useState(""),
     [busy, setBusy] = useState(false),
-    [messages, setMessages] = useState<AuditMessage[]>([]),
+    [turns, setTurns] = useState<ChatTurn[]>([]),
+    [transcriptReady, setTranscriptReady] = useState(false),
     [auditResults, setAuditResults] = useState<
       Partial<Record<"official" | "experimental", Result>>
     >({}),
     [error, setError] = useState(""),
     [evidence, setEvidence] = useState<Evidence | null>(null),
+    [evidenceOpen, setEvidenceOpen] = useState(false),
     [apiReady, setApiReady] = useState<boolean | null>(null),
     [tab, setTab] = useState<"catalog" | "agent">("catalog"),
     [mapFocus, setMapFocus] = useState<MapFocusRequest | null>(null);
   const controller = useRef<AbortController | null>(null),
     agentScroll = useRef<HTMLDivElement | null>(null),
+    activeTurn = useRef<string | null>(null),
+    followLatest = useRef(true),
     pendingMap = useRef<{
       command: MapCommand;
       abort?: AbortController;
+      turnId?: string;
     } | null>(null),
     mapAllowed = useRef(true),
     seenCommands = useRef(new Set<string>()),
@@ -112,9 +110,74 @@ export function Cityproof() {
     currentKey.current = key;
   }, [key]);
   useEffect(() => {
+    const frame = requestAnimationFrame(() => {
+      try {
+        setTurns(
+          restoreTranscript(sessionStorage.getItem("cityproof-dialog-v1")),
+        );
+      } catch {
+        /* Storage may be disabled. */
+      }
+      setTranscriptReady(true);
+    });
+    return () => cancelAnimationFrame(frame);
+  }, []);
+  useEffect(() => {
+    if (!transcriptReady) return;
+    try {
+      sessionStorage.setItem("cityproof-dialog-v1", JSON.stringify(turns));
+    } catch {
+      /* Keep the in-memory conversation if storage is full. */
+    }
+  }, [turns, transcriptReady]);
+  useEffect(() => {
     const node = agentScroll.current;
-    if (node) node.scrollTop = messages.length || error ? node.scrollHeight : 0;
-  }, [messages, error]);
+    if (!node || !followLatest.current) return;
+    const latestTurn = node.querySelector<HTMLElement>(".chat-turn:last-child");
+    if (latestTurn)
+      node.scrollTop +=
+        latestTurn.getBoundingClientRect().top -
+        node.getBoundingClientRect().top -
+        12;
+  }, [turns]);
+  function appendEvent(event: AuditMessage, turnId = activeTurn.current) {
+    if (!turnId) return;
+    setTurns((prev) =>
+      prev.map((t) =>
+        t.id === turnId
+          ? {
+              ...t,
+              ...(event.answer ? { answer: event.answer } : {}),
+              events: [
+                ...t.events,
+                {
+                  type: event.type,
+                  name: event.name,
+                  status: event.status,
+                  text: event.text,
+                  commandId: event.commandId,
+                  resultKind: event.result?.kind,
+                },
+              ],
+            }
+          : t,
+      ),
+    );
+  }
+  function finishTurn(
+    id: string | null,
+    status: ChatTurn["status"],
+    text?: string,
+  ) {
+    if (id)
+      setTurns((prev) =>
+        prev.map((t) =>
+          t.id === id && !(status === "cancelled" && t.status !== "running")
+            ? { ...t, status, ...(text ? { error: text } : {}) }
+            : t,
+        ),
+      );
+  }
   const evaluation = useMemo(
     () => evaluateScenario({ decisions }),
     [decisions],
@@ -152,18 +215,14 @@ export function Cityproof() {
     if (manual) mapAllowed.current = false;
     const pending = pendingMap.current;
     if (pending?.abort)
-      setMessages((prev) =>
-        prev.map((m) =>
-          m.type === "map_status" &&
-          m.commandId === pending.command.id &&
-          m.status === "requested"
-            ? {
-                ...m,
-                status: "cancelled",
-                text: "Ожидавшийся переход отменён. Текущее управление картой сохранено.",
-              }
-            : m,
-        ),
+      appendEvent(
+        {
+          type: "map_status",
+          commandId: pending.command.id,
+          status: "cancelled",
+          text: "Переход отменён. Ручное управление картой сохранено.",
+        },
+        pending.turnId,
       );
     pendingMap.current = null;
     setMapFocus(null);
@@ -189,17 +248,17 @@ export function Cityproof() {
     if (!mayApplyMap(id)) return;
     const pending = pendingMap.current!;
     if (pending.abort)
-      setMessages((prev) => [
-        ...prev,
+      appendEvent(
         {
           type: "map_status",
           commandId: id,
           status: applied ? "applied" : "failed",
           text: applied
-            ? "Показано на карте: район, показатель, режим и вычисление подтверждены браузером."
-            : "Карта не подтвердила переход. Вычисление доступно в ответе.",
+            ? "Результат показан на карте"
+            : "Карта не подтвердила переход. Расчёт доступен в ответе.",
         },
-      ]);
+        pending.turnId,
+      );
     pendingMap.current = null;
     setMapFocus(null);
   }
@@ -213,7 +272,8 @@ export function Cityproof() {
     );
     setEvidence(null);
     clearMapRequest();
-    setMessages([]);
+    finishTurn(activeTurn.current, "cancelled");
+    activeTurn.current = null;
     setAuditResults({});
     setError("");
     runRef.current = undefined;
@@ -240,12 +300,14 @@ export function Cityproof() {
     focusMap = false,
     command?: MapCommand,
     abort?: AbortController,
+    open = true,
   ) {
     const parent = [official, stress].find((r) => r?.evidence[e.id]);
     if (!parent || (parent.kind === "experimental" && !winter)) return;
     const canonical = parent.evidence[e.id];
     if (!command) clearMapRequest(true);
     setEvidence(canonical);
+    setEvidenceOpen(command ? false : open);
     setDistrict(canonical.districtId);
     setMetric(canonical.metricId);
     setMode(parent.kind === "experimental" ? "experimental" : "official");
@@ -253,7 +315,11 @@ export function Cityproof() {
       const target =
         command ??
         commandForEvidence(crypto.randomUUID(), parent, canonical, winter);
-      pendingMap.current = { command: target, abort };
+      pendingMap.current = {
+        command: target,
+        abort,
+        turnId: activeTurn.current ?? undefined,
+      };
       setMapFocus(target);
     }
   }
@@ -266,13 +332,30 @@ export function Cityproof() {
     const abort = new AbortController();
     controller.current = abort;
     const requestKey = key;
+    const promptText =
+      prompt ||
+      question.trim() ||
+      `Проверь мой план в обычных условиях${winter ? " и при учебной зиме" : ""}. Объясни основные изменения.`;
+    const turnId = crypto.randomUUID();
+    activeTurn.current = turnId;
+    followLatest.current = true;
     clearMapRequest();
     mapAllowed.current = true;
     seenCommands.current.clear();
     setEvidence(null);
     setBusy(true);
     setError("");
-    setMessages([]);
+    setTurns((prev) => [
+      ...prev,
+      {
+        id: turnId,
+        key: requestKey,
+        question: promptText,
+        events: [],
+        status: "running",
+      },
+    ]);
+    setQuestion("");
     setTab("agent");
     try {
       const response = await fetch("/api/analyze", {
@@ -280,10 +363,7 @@ export function Cityproof() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           decisions,
-          question:
-            prompt ||
-            question ||
-            `Проверь мой план в обычных условиях${winter ? " и при учебной зиме" : ""}. Объясни основные изменения.`,
+          question: promptText,
           winter,
           ...(district
             ? { focus: { district_id: district, metric_id: metric } }
@@ -333,30 +413,29 @@ export function Cityproof() {
               continue;
             seenCommands.current.add(resolved.command.id);
             if (!mapAllowed.current) {
-              setMessages((prev) => [
-                ...prev,
+              appendEvent(
                 {
                   type: "map_status",
                   commandId: resolved.command.id,
                   status: "cancelled",
-                  text: "Команда получена, но переход отменён: вы изменили карту вручную.",
+                  text: "Переход отменён: вы изменили карту вручную.",
                 },
-              ]);
+                turnId,
+              );
               continue;
             }
-            setMessages((prev) => [
-              ...prev,
+            appendEvent(
               {
                 type: "map_status",
                 commandId: resolved.command.id,
                 status: "requested",
-                text: "Агент запросил показ на карте.",
               },
-            ]);
+              turnId,
+            );
             showEvidence(resolved.evidence, true, resolved.command, abort);
             continue;
           }
-          setMessages((prev) => [...prev, event]);
+          appendEvent(event, turnId);
           if (event.type === "result" && event.result) {
             const serverResult = event.result;
             setAuditResults((prev) => ({
@@ -374,23 +453,26 @@ export function Cityproof() {
         throw new Error(
           "Соединение завершилось без подтверждённого ответа. Запустите проверку повторно.",
         );
-      if (currentKey.current === requestKey && controller.current === abort)
-        setQuestion("");
+      if (
+        currentKey.current === requestKey &&
+        controller.current === abort &&
+        !abort.signal.aborted
+      )
+        finishTurn(turnId, "complete");
     } catch (e) {
-      if (currentKey.current === requestKey && controller.current === abort)
-        setError(
-          e instanceof Error && e.name === "AbortError"
-            ? "Анализ остановлен. Уже выполненные расчёты сохранены."
-            : e instanceof Error
-              ? e.message
-              : "Ошибка соединения.",
-        );
+      if (currentKey.current === requestKey && controller.current === abort) {
+        const text = abort.signal.aborted
+          ? "Анализ остановлен. Уже выполненные операции сохранены."
+          : e instanceof Error
+            ? e.message
+            : "Ошибка соединения.";
+        finishTurn(turnId, abort.signal.aborted ? "cancelled" : "error", text);
+      }
     } finally {
       if (currentKey.current === requestKey && controller.current === abort)
         setBusy(false);
     }
   }
-  const answer = messages.findLast((m) => m.type === "answer")?.answer;
   const allEvidence = [
     ...(official ? Object.values(official.evidence) : []),
     ...(stress ? Object.values(stress.evidence) : []),
@@ -747,6 +829,8 @@ export function Cityproof() {
             <EvidencePanel
               evidence={evidence}
               experimental={mode === "experimental"}
+              expanded={evidenceOpen}
+              onExpand={() => showEvidence(evidence, true)}
               onClose={() => {
                 clearMapRequest(true);
                 setEvidence(null);
@@ -788,8 +872,23 @@ export function Cityproof() {
             </div>
             <p>От вопроса — к проверяемым фактам.</p>
           </div>
-          <div className="agent-scroll" ref={agentScroll}>
-            {!busy && !error && messages.length === 0 && (
+          <div
+            className="agent-scroll"
+            ref={agentScroll}
+            onWheel={() => {
+              followLatest.current = false;
+            }}
+            onTouchStart={() => {
+              followLatest.current = false;
+            }}
+            onPointerDown={() => {
+              followLatest.current = false;
+            }}
+            onKeyDown={() => {
+              followLatest.current = false;
+            }}
+          >
+            {!busy && !error && turns.length === 0 && (
               <div className="agent-intro">
                 <div className="agent-orb">
                   <Activity size={27} />
@@ -827,7 +926,8 @@ export function Cityproof() {
                   setEvidence(null);
                   setMode(official ? "official" : "baseline");
                   setWinter(e.target.checked);
-                  setMessages([]);
+                  finishTurn(activeTurn.current, "cancelled");
+                  activeTurn.current = null;
                   setAuditResults({});
                   setError("");
                   runRef.current = undefined;
@@ -858,71 +958,15 @@ export function Cityproof() {
                 без API.
               </div>
             )}
-            {messages.filter((m) => m.type === "tool").length > 0 && (
-              <div className="tool-log">
-                <span className="eyebrow">ЖУРНАЛ ИНСТРУМЕНТОВ</span>
-                {messages
-                  .filter((m) => m.type === "tool")
-                  .map((m, i) => (
-                    <div key={i}>
-                      <i className={m.status === "completed" ? "done" : ""} />
-                      <code>{m.name}</code>
-                      <span>
-                        {m.status === "completed"
-                          ? m.name === "show_evidence_on_map"
-                            ? "Отправлено"
-                            : "Готово"
-                          : m.status === "failed"
-                            ? "Ошибка"
-                            : "Начат"}
-                        {m.durationMs !== undefined
-                          ? ` · ${m.durationMs} мс`
-                          : ""}
-                      </span>
-                    </div>
-                  ))}
-              </div>
-            )}
-            {messages
-              .filter((m) => m.type === "map_status")
-              .map((m, i) => (
-                <p
-                  className={`map-action-status ${m.status}`}
-                  role="status"
-                  key={i}
-                >
-                  {m.text}
-                </p>
-              ))}
-            {answer && (
-              <div className="answer">
-                <h3>Ответ по данным модели</h3>
-                <p>{answer.summary}</p>
-                {answer.facts.map((f, i) => (
-                  <button
-                    key={i}
-                    disabled={!f.evidenceId}
-                    onClick={() => {
-                      const e = allEvidence.find((e) => e.id === f.evidenceId);
-                      if (e) showEvidence(e, true);
-                    }}
-                  >
-                    <span>
-                      {f.label}
-                      <strong>{f.value}</strong>
-                    </span>
-                    {f.evidenceId && (
-                      <span className="show-map-action">
-                        Показать на карте <ChevronRight size={13} />
-                      </span>
-                    )}
-                  </button>
-                ))}
-                {answer.limitations.map((l, i) => (
-                  <small key={i}>{l}</small>
-                ))}
-              </div>
-            )}
+            <AgentConversation
+              turns={turns}
+              currentKey={key}
+              onEvidence={(id, open) => {
+                const found = allEvidence.find((e) => e.id === id);
+                if (found)
+                  showEvidence(found, true, undefined, undefined, open);
+              }}
+            />
             {error && (
               <div className="error-box" role="alert">
                 {error}
@@ -935,7 +979,7 @@ export function Cityproof() {
               disabled={!district}
               onClick={() =>
                 setQuestion(
-                  `Объясни показатель ${metric} в районе ${selectedDistrict.name} и объясни расчёт.`,
+                  `Объясни показатель ${metric} в районе ${selectedDistrict.name} и его причины.`,
                 )
               }
             >
@@ -950,14 +994,28 @@ export function Cityproof() {
               placeholder="Задайте свой вопрос о плане…"
               value={question}
               onChange={(e) => setQuestion(e.target.value)}
+              onKeyDown={(e) => {
+                if (
+                  e.key === "Enter" &&
+                  !e.shiftKey &&
+                  !e.nativeEvent.isComposing &&
+                  !busy &&
+                  official &&
+                  transcriptReady
+                ) {
+                  e.preventDefault();
+                  void analyze();
+                }
+              }}
             />
             <button
               className="primary-button"
-              disabled={!official}
+              disabled={!official || !transcriptReady}
               onClick={() =>
                 busy
                   ? (controller.current?.abort(),
                     clearMapRequest(),
+                    finishTurn(activeTurn.current, "cancelled"),
                     setBusy(false))
                   : void analyze()
               }
@@ -970,7 +1028,7 @@ export function Cityproof() {
               ) : (
                 <>
                   <Sparkles size={16} />
-                  Проверить план
+                  {question.trim() ? "Отправить" : "Проверить план"}
                   <ArrowUp size={17} />
                 </>
               )}

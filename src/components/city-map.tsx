@@ -37,15 +37,7 @@ type MapState = {
 };
 
 export function CityMap(props: Props) {
-  const {
-    focusRequest,
-    selectedFeatureId,
-    onFocusApplied,
-    evidenceId,
-    metric,
-    result,
-    onBeforeFocus,
-  } = props;
+  const { focusRequest, selectedFeatureId, evidenceId, metric, result } = props;
   const container = useRef<HTMLDivElement>(null);
   const instance = useRef<MapState | null>(null);
   const latest = useRef(props);
@@ -323,42 +315,58 @@ export function CityMap(props: Props) {
       evidenceId !== request.evidenceId
     )
       return;
-    if (onBeforeFocus && !onBeforeFocus(request.id)) return;
+    if (
+      latest.current.onBeforeFocus &&
+      !latest.current.onBeforeFocus(request.id)
+    )
+      return;
     processed.current.add(request.id);
     const layer = state.layers.get(request.featureId);
     if (!layer) {
-      onFocusApplied?.(request.id, false);
+      latest.current.onFocusApplied?.(request.id, false);
       return;
     }
     state.map.stop();
+    state.map.invalidateSize({ pan: false });
     state.preserveViewport();
-    state.map.fitBounds(layer.getBounds(), {
+    let finished = false;
+    let fallback: ReturnType<typeof setTimeout> | undefined;
+    const finish = () => {
+      if (finished) return;
+      finished = true;
+      clearTimeout(fallback);
+      state.map.off("moveend", finish);
+      const current = latest.current;
+      if (current.onBeforeFocus && !current.onBeforeFocus(request.id)) return;
+      const applied =
+        state.map.getBounds().contains(layer.getBounds().getCenter()) &&
+        current.selectedFeatureId === request.featureId &&
+        current.metric === request.metricId &&
+        current.result.id === request.resultId &&
+        current.evidenceId === request.evidenceId &&
+        state.labels
+          .get(request.featureId)
+          ?.getElement()
+          ?.querySelector("button")
+          ?.getAttribute("aria-pressed") === "true";
+      current.onFocusApplied?.(request.id, applied);
+    };
+    state.map.once("moveend", finish);
+    state.map.flyToBounds(layer.getBounds(), {
       padding: [55, 60],
       maxZoom: 12.5,
-      animate: false,
+      animate: !window.matchMedia("(prefers-reduced-motion: reduce)").matches,
+      duration: 0.85,
     });
     state.update();
-    // fitBounds with animate:false is synchronous. Report execution only after
-    // the selected label and an actual Leaflet camera change have been applied.
-    const applied =
-      state.map.getBounds().contains(layer.getBounds().getCenter()) &&
-      selectedFeatureId === request.featureId &&
-      state.labels
-        .get(request.featureId)
-        ?.getElement()
-        ?.querySelector("button")
-        ?.getAttribute("aria-pressed") === "true";
-    onFocusApplied?.(request.id, applied);
-  }, [
-    ready,
-    focusRequest,
-    selectedFeatureId,
-    onFocusApplied,
-    onBeforeFocus,
-    evidenceId,
-    metric,
-    result.id,
-  ]);
+    if (!finished) fallback = setTimeout(finish, 1700);
+    return () => {
+      finished = true;
+      clearTimeout(fallback);
+      state.map.off("moveend", finish);
+      state.map.stop();
+    };
+  }, [ready, focusRequest, selectedFeatureId, evidenceId, metric, result.id]);
 
   function toggleBasemap() {
     const state = instance.current;

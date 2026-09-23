@@ -30,7 +30,12 @@ export type Fact = {
   evidenceId?: string;
   resultId?: string;
 };
-export type Answer = { summary: string; facts: Fact[]; limitations: string[] };
+export type Answer = {
+  summary: string;
+  facts: Fact[];
+  limitations: string[];
+  details?: { budget?: Fact; risks: Fact[]; nextChecks: string[] };
+};
 const signed = (n: number) => `${n > 0 ? "+" : ""}${format(n)}`;
 export function verifyAnswer(input: unknown, ctx: ToolContext): Answer {
   const parsed = answerSchema.parse(input);
@@ -109,9 +114,73 @@ export function verifyAnswer(input: unknown, ctx: ToolContext): Answer {
         : parsed.intent === "explain"
           ? "Показанные изменения подтверждены журналом расчёта. Нажмите на факт, чтобы увидеть исходное значение и каждый применённый эффект."
           : `Официальный расчёт${ctx.winter ? " и отдельный учебный эксперимент" : ""} выполнен инструментами. Ниже — проверенные результаты выбранного плана.`;
+  // Presentation only: numbers come from completed engine results, never model prose.
+  const official = [...ctx.results.values()].find((r) => r.kind === "official");
+  const primary = facts.find((f) => f.evidenceId) ?? facts[0];
+  const shown = primary?.resultId
+    ? ctx.results.get(primary.resultId)
+    : undefined;
+  const numerical = parsed.intent === "audit" || parsed.intent === "explain";
+  const risks: Fact[] = [];
+  if (numerical && shown) {
+    risks.push({
+      label:
+        shown.kind === "experimental"
+          ? "В учебном эксперименте"
+          : "В расчёте по заданию",
+      value: `Значений ниже порога: ${shown.criticalPairs.length}. Минимум по районам: ${format(shown.minimum)}.`,
+      resultId: shown.id,
+    });
+    for (const c of parsed.claims) {
+      const e = c.evidence_id ? ctx.evidence.get(c.evidence_id) : undefined;
+      if (
+        e &&
+        e.value < e.initial &&
+        !risks.some((f) => f.evidenceId === e.id)
+      ) {
+        const fact = facts.find((f) => f.evidenceId === e.id);
+        if (fact)
+          risks.push({
+            label: `${model.districts.find((d) => d.id === e.districtId)!.name} · ${model.metrics.find((m) => m.id === e.metricId)!.name}`,
+            value: `Снижение: ${format(e.initial)} → ${format(e.value)}.`,
+            evidenceId: e.id,
+            resultId: c.result_id!,
+          });
+      }
+      if (risks.length >= 3) break;
+    }
+  }
   return {
     summary,
     facts,
+    details: {
+      ...(numerical && official && ctx.executed.has("evaluate_scenario")
+        ? {
+            budget: {
+              label: "Стоимость и бюджет",
+              value: `${format(official.cost)} из ${format(official.cost + official.remaining)} ед. Остаток: ${format(official.remaining)} ед. Ограничения плана соблюдены.`,
+              resultId: official.id,
+            },
+          }
+        : {}),
+      risks,
+      nextChecks: numerical
+        ? [
+            ...(facts.some((f) => f.evidenceId)
+              ? ["Сверьте слагаемые выбранного показателя в расчёте."]
+              : ["Уточните интересующий район и показатель."]),
+            ctx.winter
+              ? "Сопоставьте результат по заданию с учебной зимой."
+              : "Проверьте план в доступном учебном зимнем эксперименте.",
+            shown?.criticalPairs.length
+              ? "Проверьте показатели ниже порога и разберите их вычисления."
+              : "Проверьте другие показатели районов перед изменением плана.",
+          ]
+        : [
+            "Уточните вопрос в пределах учебных данных.",
+            "Выберите район с данными и попросите проверить его показатель.",
+          ],
+    },
     limitations: [
       "Синтетическая учебная модель: результат не является рекомендацией реальной городской политики.",
       ...(ctx.winter

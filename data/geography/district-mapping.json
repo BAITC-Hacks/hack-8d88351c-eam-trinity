@@ -1,0 +1,8 @@
+[
+  { "mapFeatureId": "relation/3479876", "modelDistrictId": "esil", "name": "Есиль" },
+  { "mapFeatureId": "relation/3482819", "modelDistrictId": "almaty", "name": "Алматы" },
+  { "mapFeatureId": "relation/3486954", "modelDistrictId": "saryarka", "name": "Сарыарка" },
+  { "mapFeatureId": "relation/8593081", "modelDistrictId": "baikonur", "name": "Байконыр" },
+  { "mapFeatureId": "relation/20593940", "modelDistrictId": "nura", "name": "Нура" },
+  { "mapFeatureId": "relation/19733918", "modelDistrictId": null, "name": "Сарайшық" }
+]

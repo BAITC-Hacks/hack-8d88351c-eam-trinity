@@ -1,0 +1,38 @@
+{
+  "schema_version": "1.0",
+  "provenance": {
+    "source": "team_authored_demonstration_assumptions",
+    "official_hackathon_dataset": false,
+    "note": "Демонстрационные допущения для проверки чувствительности. В материалах организатора этих коэффициентов нет. Не прогноз реальной зимы или безопасности города."
+  },
+  "application_rule": "For a valid plan, copy official updated indicators, sum the chosen event deltas once, clip to [0,100], then recompute aggregates. Never mutate official output or multiply by measure lag.",
+  "measure_specific_protection": false,
+  "events": [
+    {
+      "id": "none",
+      "version": "1.0",
+      "name": "Без дополнительного события",
+      "deltas": []
+    },
+    {
+      "id": "winter_demo",
+      "version": "1.0",
+      "name": "Учебный зимний стресс-тест",
+      "description": "Условное одновременное снижение T1 на 4 пункта и C1 на 8 пунктов во всех пяти районах. Параметры заданы командой, не оценены по наблюдениям.",
+      "deltas": [
+        {
+          "scope": "city",
+          "metric_id": "T1",
+          "delta": -4
+        },
+        {
+          "scope": "city",
+          "metric_id": "C1",
+          "delta": -8
+        }
+      ],
+      "probability": null,
+      "interpretation": "Техническая проверка чувствительности к явно заданному шоку; не оценка вероятности или доказательство реальной устойчивости."
+    }
+  ]
+}

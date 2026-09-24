@@ -1,0 +1,63 @@
+{
+  "version": "FINAL-2",
+  "contents": "Instructions and source materials, not implemented application",
+  "checks_this_version": [
+    "Official source documents byte-identical to the four conversation uploads.",
+    "Machine-readable model SHA256 unchanged from previous package.",
+    "Data JSON files parse successfully.",
+    "Updated brief includes mandatory agent, city scene, and GitHub publication workflow.",
+    "No application or API tests performed by package assembly."
+  ],
+  "files": [
+    {
+      "path": "CITYPROOF_START.md",
+      "bytes": 59342,
+      "sha256": "b0f8058e93e46eb508cf5fa5c2750b885bdc1b42dbe40072f5e6367645ab6694"
+    },
+    {
+      "path": "COPY_TO_CODEX.txt",
+      "bytes": 14194,
+      "sha256": "5980e57c2825d971becbc3d7768c16226aeb35b51bc1c886c4cbe8b8134f2ea0"
+    },
+    {
+      "path": "DATA_CHECK.json",
+      "bytes": 1280,
+      "sha256": "d9a9c00aa0ce7a00369cf2e6b291293d973a1503d22cf7f525b0d65bc4acccf3"
+    },
+    {
+      "path": "READ_ME_FIRST.md",
+      "bytes": 3693,
+      "sha256": "fe33512c84180ee8a11b40d9db9a9759d762e0fd5ac67b6bfc29d904dea6bf71"
+    },
+    {
+      "path": "hackalem_model.json",
+      "bytes": 15206,
+      "sha256": "2e934f191834e3e4184ef70e036b75780c5e7cdd0450db0d5793c6fbaa742f0b"
+    },
+    {
+      "path": "sources/01_case.pdf",
+      "bytes": 82598,
+      "sha256": "aefb29faba2a4d8b96713c7ca728dbe490bfdce490b95c7620171a34c7df8195"
+    },
+    {
+      "path": "sources/02_dataset.docx",
+      "bytes": 25417,
+      "sha256": "148696953aea5a9c66b7a6aaec9bc324f7a7a8fbcf538fb4375d5c1655640566"
+    },
+    {
+      "path": "sources/03_participant_instructions.pdf",
+      "bytes": 55704,
+      "sha256": "90ee9b4e214369400c6af4b526878a33dbb8c830c67bee8abb6cf6b1ebebefdf"
+    },
+    {
+      "path": "sources/04_participation_rules.pdf",
+      "bytes": 96422,
+      "sha256": "916f0cdb6f2884be345b01ce9ab1596425d69ea3f184d6be4347068b791f62e9"
+    },
+    {
+      "path": "stress_events.json",
+      "bytes": 1792,
+      "sha256": "e55fc85ba8dd5fa67f39b5679362b522fee4d2e872b55d0973a99cac18969d01"
+    }
+  ]
+}
